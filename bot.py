@@ -2,26 +2,39 @@ import discord
 from discord.ext import commands
 import psycopg2
 import re
-
 import os
 
+# =========================
+# VARIABLES
+# =========================
+
 TOKEN = os.getenv("TOKEN")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 CANAL_REGISTRO = "registro-kuro"
 
+# =========================
+# INTENTS
+# =========================
+
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# =========================
+# BOT
+# =========================
+
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
 
 # =========================
 # BASE DE DATOS POSTGRESQL
 # =========================
 
-conexion = psycopg2.connect(
-    os.getenv("DATABASE_URL")
-)
-
+conexion = psycopg2.connect(DATABASE_URL)
 cursor = conexion.cursor()
 
 # =========================
@@ -38,19 +51,6 @@ CREATE TABLE IF NOT EXISTS puntos (
 conexion.commit()
 
 # =========================
-# CONFIGURAR BOT
-# =========================
-
-intents = discord.Intents.default()
-intents.message_content = True
-
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents
-)
-
-
-# =========================
 # BOT LISTO
 # =========================
 
@@ -65,61 +65,64 @@ async def on_ready():
 @bot.event
 async def on_message(message):
 
-    # Ignorar mensajes que no sean del bot de MineLatino
-    if message.author.name != "Ultimate Clans V7":
-        return
+    # Detectar SOLO mensajes del bot MineLatino
+    if (
+        message.author.name == "Ultimate Clans V7"
+        and message.channel.name == CANAL_REGISTRO
+    ):
 
-    # Verificar canal
-    if message.channel.name != CANAL_REGISTRO:
-        return
+        contenido = message.content
 
-    contenido = message.content
+        patron = r"\((.*?) ha conseguido ([\d\.]+) puntos para este clan\)"
 
-    # Buscar nombre y puntos
-    patron = r"\((.*?) ha conseguido ([\d\.]+) puntos para este clan\)"
+        resultado = re.search(patron, contenido)
 
-    resultado = re.search(patron, contenido)
+        if resultado:
 
-    if resultado:
+            usuario = resultado.group(1)
 
-        usuario = resultado.group(1)
+            puntos = resultado.group(2)
+            puntos = puntos.replace(".", "")
+            puntos = int(puntos)
 
-        puntos = resultado.group(2)
-        puntos = puntos.replace(".", "")
-        puntos = int(puntos)
-
-        # Verificar si ya existe
-        cursor.execute(
-            "SELECT puntos FROM puntos WHERE usuario = ?",
-            (usuario,)
-        )
-
-        fila = cursor.fetchone()
-
-        if fila:
-            nuevos_puntos = fila[0] + puntos
-
+            # Buscar usuario existente
             cursor.execute(
-                "UPDATE puntos SET puntos = ? WHERE usuario = ?",
-                (nuevos_puntos, usuario)
+                "SELECT puntos FROM puntos WHERE usuario = %s",
+                (usuario,)
             )
 
-        else:
-            cursor.execute(
-                "INSERT INTO puntos(usuario, puntos) VALUES(?, ?)",
-                (usuario, puntos)
+            fila = cursor.fetchone()
+
+            # Si existe, sumar puntos
+            if fila:
+
+                nuevos_puntos = fila[0] + puntos
+
+                cursor.execute(
+                    "UPDATE puntos SET puntos = %s WHERE usuario = %s",
+                    (nuevos_puntos, usuario)
+                )
+
+            # Si no existe, crearlo
+            else:
+
+                cursor.execute(
+                    "INSERT INTO puntos(usuario, puntos) VALUES(%s, %s)",
+                    (usuario, puntos)
+                )
+
+            conexion.commit()
+
+            await message.channel.send(
+                f"✅ {usuario} sumó {puntos:,} puntos al registro Kuro."
             )
 
-        conexion.commit()
-
-        await message.channel.send(
-            f"✅ {usuario} sumó {puntos:,} puntos al registro Kuro."
-        )
-
+    # IMPORTANTE:
+    # Esto permite que funcionen los comandos
     await bot.process_commands(message)
 
 # =========================
-# VER RANKING
+# RANKING
 # =========================
 
 @bot.command()
@@ -157,7 +160,7 @@ async def topkuro(ctx):
 async def puntos(ctx, usuario):
 
     cursor.execute(
-        "SELECT puntos FROM puntos WHERE usuario = ?",
+        "SELECT puntos FROM puntos WHERE usuario = %s",
         (usuario,)
     )
 
@@ -170,10 +173,13 @@ async def puntos(ctx, usuario):
         )
 
     else:
-        await ctx.send("Ese usuario no existe.")
+
+        await ctx.send(
+            "Ese usuario no existe."
+        )
 
 # =========================
-# REINICIAR TABLA
+# RESET COMPLETO
 # =========================
 
 @bot.command()
@@ -189,7 +195,7 @@ async def resetkuro(ctx):
     )
 
 # =========================
-# ELIMINAR USUARIO
+# BORRAR USUARIO
 # =========================
 
 @bot.command()
@@ -197,7 +203,7 @@ async def resetkuro(ctx):
 async def borrarusuario(ctx, usuario):
 
     cursor.execute(
-        "DELETE FROM puntos WHERE usuario = ?",
+        "DELETE FROM puntos WHERE usuario = %s",
         (usuario,)
     )
 
@@ -206,6 +212,14 @@ async def borrarusuario(ctx, usuario):
     await ctx.send(
         f"🗑️ Usuario {usuario} eliminado."
     )
+
+# =========================
+# COMANDO TEST
+# =========================
+
+@bot.command()
+async def ping(ctx):
+    await ctx.send("pong")
 
 # =========================
 # EJECUTAR BOT
