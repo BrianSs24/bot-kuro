@@ -11,15 +11,15 @@ import os
 TOKEN = os.getenv("TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-CANAL_KURO_ID = 1331359760414539791  # tu canal
+CANAL_KURO_ID = 1331359760414539791
 
 # =========================
-# ROLES PERMITIDOS (NUEVO)
+# ROLES PERMITIDOS
 # =========================
 
 ALLOWED_ROLES = [
-    935248281980796948,  # Rol 1 (cámbialo)
-    920144442843885639   # Rol 2 (cámbialo)
+    935248281980796948,
+    920144442843885639
 ]
 
 def tiene_permiso(ctx):
@@ -31,25 +31,34 @@ def tiene_permiso(ctx):
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True  # recomendado para roles
+intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# DB
+# DB FUNCTION (FIX IMPORTANTE)
 # =========================
 
-conexion = psycopg2.connect(DATABASE_URL, sslmode="require")
-cursor = conexion.cursor()
+def ejecutar(query, params=None):
+    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+    cur = conn.cursor()
 
-cursor.execute("""
+    cur.execute(query, params)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# =========================
+# INIT TABLE
+# =========================
+
+ejecutar("""
 CREATE TABLE IF NOT EXISTS puntos_kuro (
     usuario TEXT PRIMARY KEY,
     puntos BIGINT DEFAULT 0
 )
 """)
-
-conexion.commit()
 
 # =========================
 # READY
@@ -66,7 +75,6 @@ async def on_ready():
 def extraer_datos(texto):
 
     match_parentesis = re.search(r"\((.*?)\)", texto)
-
     if match_parentesis:
         texto = match_parentesis.group(1)
 
@@ -85,15 +93,18 @@ def extraer_datos(texto):
     return usuario, puntos
 
 # =========================
-# MESSAGE
+# MESSAGE EVENT (MEJORADO)
 # =========================
 
 @bot.event
 async def on_message(message):
 
-    if message.author.bot and "MineLatino" not in message.author.name:
-        return
+    # ❌ ignorar TODOS los bots excepto MineLatino
+    if message.author.bot:
+        if "MineLatino" not in message.author.name:
+            return
 
+    # SOLO canal KURO
     if message.channel.id != CANAL_KURO_ID:
         await bot.process_commands(message)
         return
@@ -119,14 +130,12 @@ async def on_message(message):
     print("⭐ PUNTOS:", puntos)
 
     try:
-        cursor.execute("""
+        ejecutar("""
             INSERT INTO puntos_kuro (usuario, puntos)
             VALUES (%s, %s)
             ON CONFLICT (usuario)
             DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
         """, (usuario, puntos))
-
-        conexion.commit()
 
         print("💾 GUARDADO OK")
 
@@ -147,18 +156,23 @@ async def on_message(message):
 async def ping(ctx):
     await ctx.send("pong")
 
-# 🔐 SOLO ADMIN DISCORD
+# 🔐 ADMIN RESET
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def resetkuro(ctx):
-    cursor.execute("DELETE FROM puntos_kuro")
-    conexion.commit()
-    await ctx.send("♻️ KURO reseteado.")
+    try:
+        ejecutar("DELETE FROM puntos_kuro")
+        await ctx.send("♻️ KURO reseteado.")
+    except Exception as e:
+        await ctx.send("❌ Error al resetear KURO.")
+        print(e)
 
-# 🔐 SOLO ROLES PERMITIDOS (NUEVO SISTEMA)
+# 🔐 TOP SOLO ROLES
 @bot.command()
 @commands.check(tiene_permiso)
 async def topkuro(ctx):
+
+    cursor = psycopg2.connect(DATABASE_URL, sslmode="require").cursor()
 
     cursor.execute("""
         SELECT usuario, puntos
@@ -167,6 +181,8 @@ async def topkuro(ctx):
     """)
 
     data = cursor.fetchall()
+
+    cursor.close()
 
     msg = "🏆 KURO TOP 🏆\n\n"
 
