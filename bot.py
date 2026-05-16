@@ -12,6 +12,7 @@ TOKEN = os.getenv("TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 CANAL_KURO_ID = 1331359760414539791
+CANAL_CMD_ID = 1278916162117177385
 
 # =========================
 # BOTS MINELATINO PERMITIDOS
@@ -34,6 +35,13 @@ def tiene_permiso(ctx):
     return any(role.id in ALLOWED_ROLES for role in ctx.author.roles)
 
 # =========================
+# VERIFICAR CANAL CMD
+# =========================
+
+def canal_cmd(ctx):
+    return ctx.channel.id == CANAL_CMD_ID
+
+# =========================
 # INTENTS
 # =========================
 
@@ -47,15 +55,24 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # DB FUNCTION
 # =========================
 
-def ejecutar(query, params=None):
+def ejecutar(query, params=None, fetch=False):
+
     conn = psycopg2.connect(DATABASE_URL, sslmode="require")
     cur = conn.cursor()
 
     cur.execute(query, params)
 
+    data = None
+
+    if fetch:
+        data = cur.fetchall()
+
     conn.commit()
+
     cur.close()
     conn.close()
+
+    return data
 
 # =========================
 # CREAR TABLA
@@ -83,6 +100,7 @@ async def on_ready():
 def extraer_datos(texto):
 
     match_parentesis = re.search(r"\((.*?)\)", texto)
+
     if match_parentesis:
         texto = match_parentesis.group(1)
 
@@ -129,6 +147,7 @@ async def on_message(message):
         usuario, puntos = extraer_datos(contenido)
 
         if usuario:
+
             try:
                 ejecutar("""
                     INSERT INTO puntos_kuro (usuario, puntos)
@@ -160,31 +179,31 @@ async def ping(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def resetkuro(ctx):
+
     try:
         ejecutar("DELETE FROM puntos_kuro")
         await ctx.send("♻️ KURO reseteado.")
+
     except Exception as e:
         await ctx.send("❌ Error al resetear KURO.")
         print(e)
 
-# 🔐 TOP SOLO ROLES
+# =========================
+# TOP KURO
+# TODOS LOS USUARIOS
+# SOLO EN CANAL CMD
+# =========================
+
 @bot.command()
-@commands.check(tiene_permiso)
+@commands.check(canal_cmd)
 async def topkuro(ctx):
 
-    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-    cur = conn.cursor()
-
-    cur.execute("""
+    data = ejecutar("""
         SELECT usuario, puntos
         FROM puntos_kuro
         ORDER BY puntos DESC
-    """)
-
-    data = cur.fetchall()
-
-    cur.close()
-    conn.close()
+        LIMIT 20
+    """, fetch=True)
 
     msg = "🏆 KURO TOP 🏆\n\n"
 
@@ -194,7 +213,31 @@ async def topkuro(ctx):
     await ctx.send(f"```{msg}```")
 
 # =========================
-# 🔥 SIMULACIÓN MINELATINO
+# PUNTOS INDIVIDUALES
+# =========================
+
+@bot.command()
+@commands.check(canal_cmd)
+async def puntoskuro(ctx, usuario: str):
+
+    data = ejecutar("""
+        SELECT puntos
+        FROM puntos_kuro
+        WHERE usuario = %s
+    """, (usuario.lower(),), fetch=True)
+
+    if not data:
+        await ctx.send("❌ Usuario no encontrado.")
+        return
+
+    puntos = data[0][0]
+
+    await ctx.send(
+        f"🏆 {usuario} tiene {puntos:,} puntos KURO."
+    )
+
+# =========================
+# SIMULACIÓN MINELATINO
 # =========================
 
 @bot.command()
@@ -206,7 +249,6 @@ async def simkuro(ctx):
 
 play.minelatino.com | Información del clan Kuro"""
 
-    # Simulación de mensaje real
     class FakeAuthor:
         def __init__(self):
             self.bot = True
