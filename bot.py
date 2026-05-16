@@ -25,7 +25,7 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# BASE DE DATOS (CON SSL)
+# BASE DE DATOS
 # =========================
 
 conexion = psycopg2.connect(DATABASE_URL, sslmode="require")
@@ -56,20 +56,27 @@ async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
 
 # =========================
-# ON MESSAGE
+# ON MESSAGE (DEBUG TOTAL)
 # =========================
 
 @bot.event
 async def on_message(message):
 
+    # Ignorar bots
     if message.author.bot:
         await bot.process_commands(message)
         return
 
-    contenido = ""
+    print("\n====================")
+    print("📩 MENSAJE RECIBIDO")
+    print("CANAL:", message.channel.name)
+    print("AUTOR:", message.author)
 
-    if message.content:
-        contenido += message.content
+    # =========================
+    # CONSTRUIR CONTENIDO
+    # =========================
+
+    contenido = message.content or ""
 
     if message.embeds:
         for embed in message.embeds:
@@ -83,23 +90,31 @@ async def on_message(message):
 
     contenido = contenido.strip()
 
-    print("📩 DETECTADO:", contenido)
+    print("🧾 CONTENIDO FINAL:", contenido)
 
+    # =========================
     # REGEX ROBUSTO
+    # =========================
+
     patron = r"([\w\W]+?)\s+ha\s+conseguido\s+([\d\.,]+)\s+puntos"
     resultado = re.search(patron, contenido, re.IGNORECASE)
 
+    print("🔎 REGEX RESULTADO:", resultado)
+
     if resultado:
 
-        usuario = resultado.group(1).strip().lower()
+        print("✔ REGEX OK")
 
+        usuario = resultado.group(1).strip().lower()
         puntos_raw = resultado.group(2)
+
         puntos = int(puntos_raw.replace(".", "").replace(",", ""))
 
-        print(f"🎯 MATCH: {usuario} + {puntos}")
+        print(f"👤 USUARIO: {usuario}")
+        print(f"⭐ PUNTOS: {puntos}")
 
         # =========================
-        # KURO (UPSERT)
+        # KURO
         # =========================
 
         if message.channel.name == CANAL_KURO:
@@ -114,7 +129,7 @@ async def on_message(message):
 
                 conexion.commit()
 
-                print("💾 Guardado KURO OK:", usuario, puntos)
+                print("💾 GUARDADO EN KURO OK")
 
                 await message.channel.send(
                     f"✅ {usuario} sumó {puntos:,} puntos en KURO."
@@ -124,7 +139,7 @@ async def on_message(message):
                 print("❌ ERROR KURO:", e)
 
         # =========================
-        # TNA (UPSERT)
+        # TNA
         # =========================
 
         elif message.channel.name == CANAL_TNA:
@@ -139,7 +154,7 @@ async def on_message(message):
 
                 conexion.commit()
 
-                print("💾 Guardado TNA OK:", usuario, puntos)
+                print("💾 GUARDADO EN TNA OK")
 
                 await message.channel.send(
                     f"✅ {usuario} sumó {puntos:,} puntos en TNA."
@@ -148,156 +163,14 @@ async def on_message(message):
             except Exception as e:
                 print("❌ ERROR TNA:", e)
 
+    else:
+        print("❌ NO HUBO MATCH CON REGEX")
+
+    # IMPORTANTE
     await bot.process_commands(message)
 
 # =========================
-# TOP KURO
-# =========================
-
-@bot.command()
-async def topkuro(ctx):
-
-    cursor.execute("SELECT usuario, puntos FROM puntos_kuro ORDER BY puntos DESC")
-    datos = cursor.fetchall()
-
-    if not datos:
-        return await ctx.send("No hay puntos en KURO.")
-
-    msg = "🏆 RANKING KURO 🏆\n\n"
-
-    for i, (u, p) in enumerate(datos, start=1):
-        msg += f"{i}. {u} → {p:,}\n"
-
-    await ctx.send(f"```{msg}```")
-
-# =========================
-# PUNTOS KURO
-# =========================
-
-@bot.command()
-async def puntoskuro(ctx, *, usuario):
-
-    usuario = usuario.strip().lower()
-
-    cursor.execute(
-        "SELECT puntos FROM puntos_kuro WHERE usuario = %s",
-        (usuario,)
-    )
-
-    res = cursor.fetchone()
-
-    if res:
-        await ctx.send(f"📊 {usuario} tiene {res[0]:,} puntos en KURO.")
-    else:
-        await ctx.send("Usuario no encontrado en KURO.")
-
-# =========================
-# RESET KURO
-# =========================
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def resetkuro(ctx):
-
-    cursor.execute("DELETE FROM puntos_kuro")
-    conexion.commit()
-
-    await ctx.send("♻️ KURO reiniciado.")
-
-# =========================
-# BORRAR USUARIO KURO
-# =========================
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def borrarusuariokuro(ctx, *, usuario):
-
-    usuario = usuario.strip().lower()
-
-    cursor.execute(
-        "DELETE FROM puntos_kuro WHERE usuario = %s",
-        (usuario,)
-    )
-
-    conexion.commit()
-
-    await ctx.send(f"🗑️ {usuario} eliminado de KURO.")
-
-# =========================
-# TOP TNA
-# =========================
-
-@bot.command()
-async def toptna(ctx):
-
-    cursor.execute("SELECT usuario, puntos FROM puntos_tna ORDER BY puntos DESC")
-    datos = cursor.fetchall()
-
-    if not datos:
-        return await ctx.send("No hay puntos en TNA.")
-
-    msg = "🏆 RANKING TNA 🏆\n\n"
-
-    for i, (u, p) in enumerate(datos, start=1):
-        msg += f"{i}. {u} → {p:,}\n"
-
-    await ctx.send(f"```{msg}```")
-
-# =========================
-# PUNTOS TNA
-# =========================
-
-@bot.command()
-async def puntostna(ctx, *, usuario):
-
-    usuario = usuario.strip().lower()
-
-    cursor.execute(
-        "SELECT puntos FROM puntos_tna WHERE usuario = %s",
-        (usuario,)
-    )
-
-    res = cursor.fetchone()
-
-    if res:
-        await ctx.send(f"📊 {usuario} tiene {res[0]:,} puntos en TNA.")
-    else:
-        await ctx.send("Usuario no encontrado en TNA.")
-
-# =========================
-# RESET TNA
-# =========================
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def resettna(ctx):
-
-    cursor.execute("DELETE FROM puntos_tna")
-    conexion.commit()
-
-    await ctx.send("♻️ TNA reiniciado.")
-
-# =========================
-# BORRAR USUARIO TNA
-# =========================
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def borrarusuariotna(ctx, *, usuario):
-
-    usuario = usuario.strip().lower()
-
-    cursor.execute(
-        "DELETE FROM puntos_tna WHERE usuario = %s",
-        (usuario,)
-    )
-
-    conexion.commit()
-
-    await ctx.send(f"🗑️ {usuario} eliminado de TNA.")
-
-# =========================
-# PING
+# COMANDO TEST
 # =========================
 
 @bot.command()
