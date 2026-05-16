@@ -13,6 +13,9 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 CANAL_KURO_ID = 1331359760414539791
 
+# 🔥 ID REAL DEL BOT MINELATINO (PON EL TUYO AQUÍ)
+MINELATINO_ID = 123456789012345678
+
 # =========================
 # ROLES PERMITIDOS
 # =========================
@@ -36,7 +39,7 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# DB FUNCTION (FIX IMPORTANTE)
+# DB FUNCTION (SIN CURSOR GLOBAL)
 # =========================
 
 def ejecutar(query, params=None):
@@ -50,7 +53,7 @@ def ejecutar(query, params=None):
     conn.close()
 
 # =========================
-# INIT TABLE
+# CREAR TABLA
 # =========================
 
 ejecutar("""
@@ -69,7 +72,7 @@ async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
 
 # =========================
-# EXTRACT FUNCTION
+# EXTRACTOR
 # =========================
 
 def extraer_datos(texto):
@@ -93,20 +96,18 @@ def extraer_datos(texto):
     return usuario, puntos
 
 # =========================
-# MESSAGE EVENT (MEJORADO)
+# MESSAGE EVENT (SOLO MINELATINO)
 # =========================
 
 @bot.event
 async def on_message(message):
 
-    # ❌ ignorar TODOS los bots excepto MineLatino
-    if message.author.bot:
-        if "MineLatino" not in message.author.name:
-            return
+    # ❌ SOLO BOT MINELATINO
+    if message.author.id != MINELATINO_ID:
+        return
 
     # SOLO canal KURO
     if message.channel.id != CANAL_KURO_ID:
-        await bot.process_commands(message)
         return
 
     contenido = message.content or ""
@@ -116,14 +117,13 @@ async def on_message(message):
             contenido += " " + embed.description
 
     print("\n====================")
-    print("📩 MENSAJE DETECTADO")
+    print("📩 MENSAJE MINELATINO DETECTADO")
     print("CONTENIDO:", contenido)
 
     usuario, puntos = extraer_datos(contenido)
 
     if not usuario:
         print("❌ NO SE PUDO EXTRAER DATA")
-        await bot.process_commands(message)
         return
 
     print("✔ USUARIO:", usuario)
@@ -156,7 +156,7 @@ async def on_message(message):
 async def ping(ctx):
     await ctx.send("pong")
 
-# 🔐 ADMIN RESET
+# 🔐 RESET SOLO ADMIN
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def resetkuro(ctx):
@@ -172,17 +172,19 @@ async def resetkuro(ctx):
 @commands.check(tiene_permiso)
 async def topkuro(ctx):
 
-    cursor = psycopg2.connect(DATABASE_URL, sslmode="require").cursor()
+    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+    cur = conn.cursor()
 
-    cursor.execute("""
+    cur.execute("""
         SELECT usuario, puntos
         FROM puntos_kuro
         ORDER BY puntos DESC
     """)
 
-    data = cursor.fetchall()
+    data = cur.fetchall()
 
-    cursor.close()
+    cur.close()
+    conn.close()
 
     msg = "🏆 KURO TOP 🏆\n\n"
 
