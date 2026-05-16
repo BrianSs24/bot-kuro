@@ -13,8 +13,14 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 CANAL_KURO_ID = 1331359760414539791
 
-# 🔥 ID REAL DEL BOT MINELATINO (PON EL TUYO AQUÍ)
-MINELATINO_ID = 123456789012345678
+# =========================
+# BOTS MINELATINO PERMITIDOS
+# =========================
+
+MINELATINO_BOTS = [
+    1331382760094306355,  # Bot 1 (cámbialo)
+    1331382760094306355   # Bot 2 (cámbialo)
+]
 
 # =========================
 # ROLES PERMITIDOS
@@ -39,7 +45,7 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# DB FUNCTION (SIN CURSOR GLOBAL)
+# DB (SIN CURSOR GLOBAL)
 # =========================
 
 def ejecutar(query, params=None):
@@ -96,14 +102,14 @@ def extraer_datos(texto):
     return usuario, puntos
 
 # =========================
-# MESSAGE EVENT (SOLO MINELATINO)
+# MESSAGE EVENT (2 BOTS)
 # =========================
 
 @bot.event
 async def on_message(message):
 
-    # ❌ SOLO BOT MINELATINO
-    if message.author.id != MINELATINO_ID:
+    # ❌ SOLO bots MineLatino permitidos
+    if message.author.id not in MINELATINO_BOTS:
         return
 
     # SOLO canal KURO
