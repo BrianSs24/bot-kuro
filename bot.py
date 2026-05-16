@@ -14,11 +14,24 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 CANAL_KURO_ID = 1331359760414539791  # tu canal
 
 # =========================
+# ROLES PERMITIDOS (NUEVO)
+# =========================
+
+ALLOWED_ROLES = [
+    935248281980796948,  # Rol 1 (cámbialo)
+    920144442843885639   # Rol 2 (cámbialo)
+]
+
+def tiene_permiso(ctx):
+    return any(role.id in ALLOWED_ROLES for role in ctx.author.roles)
+
+# =========================
 # INTENTS
 # =========================
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # recomendado para roles
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -52,17 +65,11 @@ async def on_ready():
 
 def extraer_datos(texto):
 
-    # =========================
-    # FORMATO 1: con paréntesis
-    # =========================
     match_parentesis = re.search(r"\((.*?)\)", texto)
 
     if match_parentesis:
         texto = match_parentesis.group(1)
 
-    # =========================
-    # FORMATO 2 o limpio
-    # =========================
     match = re.search(
         r"([\w\d_]+)\s+ha\s+conseguido\s+([\d\.,]+)",
         texto,
@@ -84,18 +91,12 @@ def extraer_datos(texto):
 @bot.event
 async def on_message(message):
 
-    # ❌ ignorar bots excepto MineLatino
     if message.author.bot and "MineLatino" not in message.author.name:
         return
 
-    # SOLO canal KURO
     if message.channel.id != CANAL_KURO_ID:
         await bot.process_commands(message)
         return
-
-    # =========================
-    # CONSTRUIR MENSAJE
-    # =========================
 
     contenido = message.content or ""
 
@@ -107,10 +108,6 @@ async def on_message(message):
     print("📩 MENSAJE DETECTADO")
     print("CONTENIDO:", contenido)
 
-    # =========================
-    # EXTRAER DATOS
-    # =========================
-
     usuario, puntos = extraer_datos(contenido)
 
     if not usuario:
@@ -120,10 +117,6 @@ async def on_message(message):
 
     print("✔ USUARIO:", usuario)
     print("⭐ PUNTOS:", puntos)
-
-    # =========================
-    # GUARDAR
-    # =========================
 
     try:
         cursor.execute("""
@@ -154,6 +147,7 @@ async def on_message(message):
 async def ping(ctx):
     await ctx.send("pong")
 
+# 🔐 SOLO ADMIN DISCORD
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def resetkuro(ctx):
@@ -161,7 +155,9 @@ async def resetkuro(ctx):
     conexion.commit()
     await ctx.send("♻️ KURO reseteado.")
 
+# 🔐 SOLO ROLES PERMITIDOS (NUEVO SISTEMA)
 @bot.command()
+@commands.check(tiene_permiso)
 async def topkuro(ctx):
 
     cursor.execute("""
