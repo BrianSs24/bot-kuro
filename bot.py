@@ -74,7 +74,10 @@ async def on_ready():
 async def on_message(message):
 
     # SOLO mensajes del bot MineLatino
-    if message.author.name == "Ultimate Clans V7":
+    if (
+    message.author.name == "Ultimate Clans V7"
+    or not message.author.bot
+):
 
         # =========================
         # LEER MENSAJE Y EMBEDS
