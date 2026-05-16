@@ -39,7 +39,7 @@ conexion = psycopg2.connect(DATABASE_URL)
 cursor = conexion.cursor()
 
 # =========================
-# TABLA KURO
+# TABLAS
 # =========================
 
 cursor.execute("""
@@ -48,10 +48,6 @@ CREATE TABLE IF NOT EXISTS puntos_kuro (
     puntos INTEGER
 )
 """)
-
-# =========================
-# TABLA TNA
-# =========================
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS puntos_tna (
@@ -68,7 +64,7 @@ conexion.commit()
 
 @bot.event
 async def on_ready():
-    print(f"Bot conectado como {bot.user}")
+    print(f"✅ Bot conectado como {bot.user}")
 
 # =========================
 # DETECTAR INFORMES
@@ -80,23 +76,43 @@ async def on_message(message):
     # SOLO mensajes del bot MineLatino
     if message.author.name == "Ultimate Clans V7":
 
-        contenido = message.content
+        # =========================
+        # LEER MENSAJE Y EMBEDS
+        # =========================
 
-        patron = r"\((.*?) ha conseguido ([\d\.]+) puntos para este clan\)"
+        contenido = ""
+
+        # Mensaje normal
+        if message.content:
+            contenido += message.content
+
+        # Embeds de MineLatino
+        if message.embeds:
+
+            for embed in message.embeds:
+
+                if embed.description:
+                    contenido += " " + embed.description
+
+        # =========================
+        # REGEX
+        # =========================
+
+        patron = r"(.*?) ha conseguido ([\d\.]+) puntos para este clan"
 
         resultado = re.search(patron, contenido)
 
         if resultado:
 
-            usuario = resultado.group(1)
+            usuario = resultado.group(1).strip()
 
             puntos = resultado.group(2)
             puntos = puntos.replace(".", "")
             puntos = int(puntos)
 
-            # =========================
-            # REGISTRO KURO
-            # =========================
+            # =====================================================
+            # ======================= KURO =========================
+            # =====================================================
 
             if message.channel.name == CANAL_KURO:
 
@@ -129,9 +145,9 @@ async def on_message(message):
                     f"✅ {usuario} sumó {puntos:,} puntos al registro KURO."
                 )
 
-            # =========================
-            # REGISTRO TNA
-            # =========================
+            # =====================================================
+            # ======================== TNA =========================
+            # =====================================================
 
             elif message.channel.name == CANAL_TNA:
 
@@ -164,6 +180,7 @@ async def on_message(message):
                     f"✅ {usuario} sumó {puntos:,} puntos al registro TNA."
                 )
 
+    # IMPORTANTE PARA COMANDOS
     await bot.process_commands(message)
 
 # =========================================================
@@ -189,9 +206,7 @@ async def topkuro(ctx):
 
     for usuario, puntos in datos:
 
-        mensaje += (
-            f"{posicion}. {usuario} → {puntos:,} puntos\n"
-        )
+        mensaje += f"{posicion}. {usuario} → {puntos:,} puntos\n"
 
         posicion += 1
 
@@ -239,6 +254,25 @@ async def resetkuro(ctx):
         "♻️ La tabla KURO fue reiniciada."
     )
 
+# =========================
+# BORRAR USUARIO KURO
+# =========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def borrarusuariokuro(ctx, usuario):
+
+    cursor.execute(
+        "DELETE FROM puntos_kuro WHERE usuario = %s",
+        (usuario,)
+    )
+
+    conexion.commit()
+
+    await ctx.send(
+        f"🗑️ Usuario {usuario} eliminado de KURO."
+    )
+
 # =========================================================
 # ====================== COMANDOS TNA =====================
 # =========================================================
@@ -262,9 +296,7 @@ async def toptna(ctx):
 
     for usuario, puntos in datos:
 
-        mensaje += (
-            f"{posicion}. {usuario} → {puntos:,} puntos\n"
-        )
+        mensaje += f"{posicion}. {usuario} → {puntos:,} puntos\n"
 
         posicion += 1
 
@@ -312,28 +344,9 @@ async def resettna(ctx):
         "♻️ La tabla TNA fue reiniciada."
     )
 
-# =========================================================
-# ================= BORRAR USUARIO KURO ===================
-# =========================================================
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def borrarusuariokuro(ctx, usuario):
-
-    cursor.execute(
-        "DELETE FROM puntos_kuro WHERE usuario = %s",
-        (usuario,)
-    )
-
-    conexion.commit()
-
-    await ctx.send(
-        f"🗑️ Usuario {usuario} eliminado de KURO."
-    )
-
-# =========================================================
-# ================= BORRAR USUARIO TNA ====================
-# =========================================================
+# =========================
+# BORRAR USUARIO TNA
+# =========================
 
 @bot.command()
 @commands.has_permissions(administrator=True)
