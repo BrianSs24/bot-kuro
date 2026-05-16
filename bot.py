@@ -11,11 +11,13 @@ import os
 TOKEN = os.getenv("TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Canales
 CANAL_KURO_ID = 1331359760414539791
+CANAL_TNA_ID = 1339641817980866700
 CANAL_CMD_ID = 1278916162117177385
 
 # =========================
-# BOTS MINELATINO PERMITIDOS
+# BOTS MINELATINO
 # =========================
 
 MINELATINO_BOTS = [
@@ -76,11 +78,18 @@ def ejecutar(query, params=None, fetch=False):
     return data
 
 # =========================
-# CREAR TABLA
+# CREAR TABLAS
 # =========================
 
 ejecutar("""
 CREATE TABLE IF NOT EXISTS puntos_kuro (
+    usuario TEXT PRIMARY KEY,
+    puntos BIGINT DEFAULT 0
+)
+""")
+
+ejecutar("""
+CREATE TABLE IF NOT EXISTS puntos_tna (
     usuario TEXT PRIMARY KEY,
     puntos BIGINT DEFAULT 0
 )
@@ -126,14 +135,15 @@ def extraer_datos(texto):
 @bot.event
 async def on_message(message):
 
-    # ❌ ignorar bots no autorizados
+    # Ignorar bots no autorizados
     if message.author.bot and message.author.id not in MINELATINO_BOTS:
         return
 
     # =========================
-    # SOLO MINELATINO REAL
+    # SOLO MINELATINO
     # =========================
-    if message.author.id in MINELATINO_BOTS and message.channel.id == CANAL_KURO_ID:
+
+    if message.author.id in MINELATINO_BOTS:
 
         contenido = message.content or ""
 
@@ -150,18 +160,44 @@ async def on_message(message):
         if usuario:
 
             try:
-                ejecutar("""
-                    INSERT INTO puntos_kuro (usuario, puntos)
-                    VALUES (%s, %s)
-                    ON CONFLICT (usuario)
-                    DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
-                """, (usuario, puntos))
 
-                print("💾 GUARDADO OK")
+                # =========================
+                # KURO
+                # =========================
 
-                await message.channel.send(
-                    f"✅ {usuario} +{puntos:,} puntos KURO"
-                )
+                if message.channel.id == CANAL_KURO_ID:
+
+                    ejecutar("""
+                        INSERT INTO puntos_kuro (usuario, puntos)
+                        VALUES (%s, %s)
+                        ON CONFLICT (usuario)
+                        DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
+                    """, (usuario, puntos))
+
+                    print("💾 KURO GUARDADO")
+
+                    await message.channel.send(
+                        f"✅ {usuario} +{puntos:,} puntos KURO"
+                    )
+
+                # =========================
+                # TNA
+                # =========================
+
+                elif message.channel.id == CANAL_TNA_ID:
+
+                    ejecutar("""
+                        INSERT INTO puntos_tna (usuario, puntos)
+                        VALUES (%s, %s)
+                        ON CONFLICT (usuario)
+                        DO UPDATE SET puntos = puntos_tna.puntos + EXCLUDED.puntos
+                    """, (usuario, puntos))
+
+                    print("💾 TNA GUARDADO")
+
+                    await message.channel.send(
+                        f"✅ {usuario} +{puntos:,} puntos TNA"
+                    )
 
             except Exception as e:
                 print("❌ ERROR BD:", e)
@@ -177,7 +213,7 @@ async def ping(ctx):
     await ctx.send("pong")
 
 # =========================
-# RESET SOLO ADMIN
+# RESET KURO
 # =========================
 
 @bot.command()
@@ -193,21 +229,30 @@ async def resetkuro(ctx):
         print(e)
 
 # =========================
+# RESET TNA
+# =========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def resettna(ctx):
+
+    try:
+        ejecutar("DELETE FROM puntos_tna")
+        await ctx.send("♻️ TNA reseteado.")
+
+    except Exception as e:
+        await ctx.send("❌ Error al resetear TNA.")
+        print(e)
+
+# =========================
 # TOP KURO
-# Usuarios normales:
-# solo canal cmd
-#
-# Roles permitidos:
-# cualquier canal
 # =========================
 
 @bot.command()
 async def topkuro(ctx):
 
-    # Si no está en el canal permitido
     if ctx.channel.id != CANAL_CMD_ID:
 
-        # Verificar roles permitidos
         if not tiene_permiso(ctx):
             await ctx.send(
                 "❌ Solo puedes usar este comando en 『🤖』cmd."
@@ -229,8 +274,36 @@ async def topkuro(ctx):
     await ctx.send(f"```{msg}```")
 
 # =========================
-# PUNTOS INDIVIDUALES
-# SOLO CANAL CMD
+# TOP TNA
+# =========================
+
+@bot.command()
+async def toptna(ctx):
+
+    if ctx.channel.id != CANAL_CMD_ID:
+
+        if not tiene_permiso(ctx):
+            await ctx.send(
+                "❌ Solo puedes usar este comando en 『🤖』cmd."
+            )
+            return
+
+    data = ejecutar("""
+        SELECT usuario, puntos
+        FROM puntos_tna
+        ORDER BY puntos DESC
+        LIMIT 20
+    """, fetch=True)
+
+    msg = "🏆 TNA TOP 🏆\n\n"
+
+    for i, (u, p) in enumerate(data, 1):
+        msg += f"{i}. {u} → {p:,}\n"
+
+    await ctx.send(f"```{msg}```")
+
+# =========================
+# PUNTOS KURO
 # =========================
 
 @bot.command()
@@ -254,7 +327,31 @@ async def puntoskuro(ctx, usuario: str):
     )
 
 # =========================
-# SIMULACIÓN MINELATINO
+# PUNTOS TNA
+# =========================
+
+@bot.command()
+@commands.check(canal_cmd)
+async def puntostna(ctx, usuario: str):
+
+    data = ejecutar("""
+        SELECT puntos
+        FROM puntos_tna
+        WHERE usuario = %s
+    """, (usuario.lower(),), fetch=True)
+
+    if not data:
+        await ctx.send("❌ Usuario no encontrado.")
+        return
+
+    puntos = data[0][0]
+
+    await ctx.send(
+        f"🏆 {usuario} tiene {puntos:,} puntos TNA."
+    )
+
+# =========================
+# SIMULACIÓN KURO
 # =========================
 
 @bot.command()
@@ -289,7 +386,45 @@ play.minelatino.com | Información del clan Kuro"""
 
     await on_message(fake)
 
-    await ctx.send("🧪 Simulación de MineLatino ejecutada")
+    await ctx.send("🧪 Simulación KURO ejecutada")
+
+# =========================
+# SIMULACIÓN TNA
+# =========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def simtna(ctx):
+
+    mensaje = """Informe del clan TNA
+¡El clan TNA ahora tiene 8,000,000 puntos de experiencia! Rosa_Melano ha conseguido 50.000 puntos para este clan
+
+play.minelatino.com | Información del clan TNA"""
+
+    class FakeAuthor:
+        def __init__(self):
+            self.bot = True
+            self.id = MINELATINO_BOTS[0]
+
+    class FakeChannel:
+        def __init__(self):
+            self.id = CANAL_TNA_ID
+
+        async def send(self, content):
+            print("📤 SIMULACIÓN ENVÍO:", content)
+
+    class FakeMessage:
+        def __init__(self):
+            self.author = FakeAuthor()
+            self.channel = FakeChannel()
+            self.content = mensaje
+            self.embeds = []
+
+    fake = FakeMessage()
+
+    await on_message(fake)
+
+    await ctx.send("🧪 Simulación TNA ejecutada")
 
 # =========================
 # RUN
