@@ -56,21 +56,15 @@ async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
 
 # =========================
-# ON MESSAGE (DEBUG TOTAL)
+# ON MESSAGE
 # =========================
 
 @bot.event
 async def on_message(message):
 
-    # Ignorar bots
     if message.author.bot:
         await bot.process_commands(message)
         return
-
-    print("\n====================")
-    print("📩 MENSAJE RECIBIDO")
-    print("CANAL:", message.channel.name)
-    print("AUTOR:", message.author)
 
     # =========================
     # CONSTRUIR CONTENIDO
@@ -90,83 +84,89 @@ async def on_message(message):
 
     contenido = contenido.strip()
 
-    print("🧾 CONTENIDO FINAL:", contenido)
+    print("\n====================")
+    print("📩 MENSAJE:", contenido)
+    print("📌 CANAL:", message.channel.name)
 
     # =========================
-    # REGEX ROBUSTO
+    # REGEX
     # =========================
 
     patron = r"([\w\W]+?)\s+ha\s+conseguido\s+([\d\.,]+)\s+puntos"
     resultado = re.search(patron, contenido, re.IGNORECASE)
 
-    print("🔎 REGEX RESULTADO:", resultado)
+    if not resultado:
+        print("❌ NO MATCH REGEX")
+        await bot.process_commands(message)
+        return
 
-    if resultado:
+    print("✔ REGEX OK")
 
-        print("✔ REGEX OK")
+    usuario = resultado.group(1).strip().lower()
+    puntos = int(resultado.group(2).replace(".", "").replace(",", ""))
 
-        usuario = resultado.group(1).strip().lower()
-        puntos_raw = resultado.group(2)
+    print("👤 USUARIO:", usuario)
+    print("⭐ PUNTOS:", puntos)
 
-        puntos = int(puntos_raw.replace(".", "").replace(",", ""))
+    # =========================
+    # NORMALIZAR CANAL
+    # =========================
 
-        print(f"👤 USUARIO: {usuario}")
-        print(f"⭐ PUNTOS: {puntos}")
+    canal_actual = message.channel.name.strip().casefold()
 
-        # =========================
-        # KURO
-        # =========================
+    # =========================
+    # KURO
+    # =========================
 
-        if message.channel.name == CANAL_KURO:
+    if canal_actual == CANAL_KURO.casefold():
 
-            try:
-                cursor.execute("""
-                    INSERT INTO puntos_kuro (usuario, puntos)
-                    VALUES (%s, %s)
-                    ON CONFLICT (usuario)
-                    DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
-                """, (usuario, puntos))
+        try:
+            cursor.execute("""
+                INSERT INTO puntos_kuro (usuario, puntos)
+                VALUES (%s, %s)
+                ON CONFLICT (usuario)
+                DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
+            """, (usuario, puntos))
 
-                conexion.commit()
+            conexion.commit()
 
-                print("💾 GUARDADO EN KURO OK")
+            print("💾 GUARDADO EN KURO OK")
 
-                await message.channel.send(
-                    f"✅ {usuario} sumó {puntos:,} puntos en KURO."
-                )
+            await message.channel.send(
+                f"✅ {usuario} sumó {puntos:,} puntos en KURO."
+            )
 
-            except Exception as e:
-                print("❌ ERROR KURO:", e)
+        except Exception as e:
+            print("❌ ERROR KURO:", e)
 
-        # =========================
-        # TNA
-        # =========================
+    # =========================
+    # TNA
+    # =========================
 
-        elif message.channel.name == CANAL_TNA:
+    elif canal_actual == CANAL_TNA.casefold():
 
-            try:
-                cursor.execute("""
-                    INSERT INTO puntos_tna (usuario, puntos)
-                    VALUES (%s, %s)
-                    ON CONFLICT (usuario)
-                    DO UPDATE SET puntos = puntos_tna.puntos + EXCLUDED.puntos
-                """, (usuario, puntos))
+        try:
+            cursor.execute("""
+                INSERT INTO puntos_tna (usuario, puntos)
+                VALUES (%s, %s)
+                ON CONFLICT (usuario)
+                DO UPDATE SET puntos = puntos_tna.puntos + EXCLUDED.puntos
+            """, (usuario, puntos))
 
-                conexion.commit()
+            conexion.commit()
 
-                print("💾 GUARDADO EN TNA OK")
+            print("💾 GUARDADO EN TNA OK")
 
-                await message.channel.send(
-                    f"✅ {usuario} sumó {puntos:,} puntos en TNA."
-                )
+            await message.channel.send(
+                f"✅ {usuario} sumó {puntos:,} puntos en TNA."
+            )
 
-            except Exception as e:
-                print("❌ ERROR TNA:", e)
+        except Exception as e:
+            print("❌ ERROR TNA:", e)
 
     else:
-        print("❌ NO HUBO MATCH CON REGEX")
+        print("⚠ CANAL NO RECONOCIDO")
 
-    # IMPORTANTE
     await bot.process_commands(message)
 
 # =========================
