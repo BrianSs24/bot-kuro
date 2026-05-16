@@ -39,11 +39,6 @@ def tiene_permiso(ctx):
 
 # =========================
 # VALIDAR CANAL CMD
-# Usuarios normales:
-# solo canal cmd
-#
-# Roles principales:
-# cualquier canal
 # =========================
 
 def puede_usar_comando(ctx):
@@ -386,24 +381,27 @@ play.minelatino.com | Información del clan Kuro"""
             self.id = MINELATINO_BOTS[0]
 
     class FakeChannel:
-        def __init__(self):
+        def __init__(self, real_channel):
             self.id = CANAL_KURO_ID
+            self.real_channel = real_channel
 
         async def send(self, content):
-            print("📤 SIMULACIÓN ENVÍO:", content)
+            await self.real_channel.send(content)
 
     class FakeMessage:
         def __init__(self):
             self.author = FakeAuthor()
-            self.channel = FakeChannel()
+            self.channel = FakeChannel(ctx.channel)
             self.content = mensaje
             self.embeds = []
 
     fake = FakeMessage()
 
-    await on_message(fake)
+    # Enviar mensaje tipo MineLatino
+    await ctx.send(mensaje)
 
-    await ctx.send("🧪 Simulación KURO ejecutada")
+    # Procesar mensaje
+    await on_message(fake)
 
 # =========================
 # SIMULACIÓN TNA
@@ -424,24 +422,27 @@ play.minelatino.com | Información del clan TNA"""
             self.id = MINELATINO_BOTS[0]
 
     class FakeChannel:
-        def __init__(self):
+        def __init__(self, real_channel):
             self.id = CANAL_TNA_ID
+            self.real_channel = real_channel
 
         async def send(self, content):
-            print("📤 SIMULACIÓN ENVÍO:", content)
+            await self.real_channel.send(content)
 
     class FakeMessage:
         def __init__(self):
             self.author = FakeAuthor()
-            self.channel = FakeChannel()
+            self.channel = FakeChannel(ctx.channel)
             self.content = mensaje
             self.embeds = []
 
     fake = FakeMessage()
 
-    await on_message(fake)
+    # Enviar mensaje tipo MineLatino
+    await ctx.send(mensaje)
 
-    await ctx.send("🧪 Simulación TNA ejecutada")
+    # Procesar mensaje
+    await on_message(fake)
 
 # =========================
 # RUN
