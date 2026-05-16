@@ -11,7 +11,7 @@ import os
 TOKEN = os.getenv("TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-CANAL_KURO_ID = 1331359760414539791  # <-- tu ID real
+CANAL_KURO_ID = 1331359760414539791  # tu canal
 
 # =========================
 # INTENTS
@@ -19,12 +19,11 @@ CANAL_KURO_ID = 1331359760414539791  # <-- tu ID real
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# DATABASE
+# DB
 # =========================
 
 conexion = psycopg2.connect(DATABASE_URL, sslmode="require")
@@ -48,77 +47,107 @@ async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
 
 # =========================
-# ON MESSAGE (ARREGLADO)
+# EXTRACT FUNCTION
+# =========================
+
+def extraer_datos(texto):
+
+    # =========================
+    # FORMATO 1: con paréntesis
+    # =========================
+    match_parentesis = re.search(r"\((.*?)\)", texto)
+
+    if match_parentesis:
+        texto = match_parentesis.group(1)
+
+    # =========================
+    # FORMATO 2 o limpio
+    # =========================
+    match = re.search(
+        r"([\w\d_]+)\s+ha\s+conseguido\s+([\d\.,]+)",
+        texto,
+        re.IGNORECASE
+    )
+
+    if not match:
+        return None, None
+
+    usuario = match.group(1).lower()
+    puntos = int(match.group(2).replace(".", "").replace(",", ""))
+
+    return usuario, puntos
+
+# =========================
+# MESSAGE
 # =========================
 
 @bot.event
 async def on_message(message):
 
-    # ❌ ignorar bots
-    if message.author.bot:
+    # ❌ ignorar bots excepto MineLatino
+    if message.author.bot and "MineLatino" not in message.author.name:
+        return
+
+    # SOLO canal KURO
+    if message.channel.id != CANAL_KURO_ID:
         await bot.process_commands(message)
         return
 
     # =========================
-    # SOLO KURO
+    # CONSTRUIR MENSAJE
     # =========================
 
-    if message.channel.id == CANAL_KURO_ID:
+    contenido = message.content or ""
 
-        contenido = message.content or ""
+    for embed in message.embeds:
+        if embed.description:
+            contenido += " " + embed.description
 
-        if message.embeds:
-            for embed in message.embeds:
-                if embed.description:
-                    contenido += " " + embed.description
-                if embed.fields:
-                    for field in embed.fields:
-                        contenido += f" {field.name} {field.value}"
+    print("\n====================")
+    print("📩 MENSAJE DETECTADO")
+    print("CONTENIDO:", contenido)
 
-        print("\n====================")
-        print("📩 MENSAJE KURO")
+    # =========================
+    # EXTRAER DATOS
+    # =========================
 
-        # =========================
-        # EXTRAER BLOQUE
-        # =========================
+    usuario, puntos = extraer_datos(contenido)
 
-        match_par = re.search(r"\((.*?)\)", contenido)
-        if match_par:
+    if not usuario:
+        print("❌ NO SE PUDO EXTRAER DATA")
+        await bot.process_commands(message)
+        return
 
-            bloque = match_par.group(1)
+    print("✔ USUARIO:", usuario)
+    print("⭐ PUNTOS:", puntos)
 
-            match = re.search(
-                r"([\w\d_]+)\s+ha\s+conseguido\s+([\d\.,]+)",
-                bloque
-            )
+    # =========================
+    # GUARDAR
+    # =========================
 
-            if match:
+    try:
+        cursor.execute("""
+            INSERT INTO puntos_kuro (usuario, puntos)
+            VALUES (%s, %s)
+            ON CONFLICT (usuario)
+            DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
+        """, (usuario, puntos))
 
-                usuario = match.group(1).lower()
-                puntos = int(match.group(2).replace(".", "").replace(",", ""))
+        conexion.commit()
 
-                try:
-                    cursor.execute("""
-                        INSERT INTO puntos_kuro (usuario, puntos)
-                        VALUES (%s, %s)
-                        ON CONFLICT (usuario)
-                        DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
-                    """, (usuario, puntos))
+        print("💾 GUARDADO OK")
 
-                    conexion.commit()
+        await message.channel.send(
+            f"✅ {usuario} +{puntos:,} puntos KURO"
+        )
 
-                    await message.channel.send(
-                        f"✅ {usuario} +{puntos:,} puntos KURO"
-                    )
+    except Exception as e:
+        print("❌ ERROR BD:", e)
 
-                except Exception as e:
-                    print("❌ ERROR BD:", e)
-
-    # 🔥 IMPORTANTE: SIEMPRE ejecutar comandos al final
     await bot.process_commands(message)
 
 # =========================
-# COMANDOS
+# COMMANDS
 # =========================
 
 @bot.command()
@@ -128,10 +157,8 @@ async def ping(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def resetkuro(ctx):
-
     cursor.execute("DELETE FROM puntos_kuro")
     conexion.commit()
-
     await ctx.send("♻️ KURO reseteado.")
 
 @bot.command()
@@ -144,9 +171,6 @@ async def topkuro(ctx):
     """)
 
     data = cursor.fetchall()
-
-    if not data:
-        return await ctx.send("No hay datos.")
 
     msg = "🏆 KURO TOP 🏆\n\n"
 
