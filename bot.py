@@ -5,14 +5,13 @@ import re
 import os
 
 # =========================
-# CONFIG
+# CONFIGURACIÓN
 # =========================
 
 TOKEN = os.getenv("TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# ⚠️ IMPORTANTE: usa el ID del canal KURO (RECOMENDADO)
-# reemplázalo con el tuyo real
+# ⚠️ REEMPLAZA ESTO POR EL ID REAL DEL CANAL KURO
 CANAL_KURO_ID = 1331359760414539791
 
 # =========================
@@ -56,7 +55,6 @@ async def on_ready():
 @bot.event
 async def on_message(message):
 
-    # ignorar bots
     if message.author.bot:
         await bot.process_commands(message)
         return
@@ -70,7 +68,7 @@ async def on_message(message):
         return
 
     # =========================
-    # CONSTRUIR CONTENIDO
+    # CONSTRUIR CONTENIDO COMPLETO
     # =========================
 
     contenido = message.content or ""
@@ -88,26 +86,42 @@ async def on_message(message):
     contenido = contenido.strip()
 
     print("\n====================")
-    print("📩 MENSAJE KURO DETECTADO")
+    print("📩 MENSAJE DETECTADO")
     print("CONTENIDO:", contenido)
 
     # =========================
-    # REGEX
+    # 1. EXTRAER TEXTO ENTRE PARÉNTESIS
     # =========================
 
-    patron = r"([\w\W]+?)\s+ha\s+conseguido\s+([\d\.,]+)\s+puntos"
-    resultado = re.search(patron, contenido, re.IGNORECASE)
+    match_par = re.search(r"\((.*?)\)", contenido)
 
-    if not resultado:
-        print("❌ NO MATCH REGEX")
+    if not match_par:
+        print("❌ No se encontró bloque del clan")
         await bot.process_commands(message)
         return
 
-    usuario = resultado.group(1).strip().lower()
-    puntos = int(resultado.group(2).replace(".", "").replace(",", ""))
+    bloque = match_par.group(1)
 
-    print("✔ MATCH OK")
-    print("👤 USUARIO:", usuario)
+    print("📦 BLOQUE:", bloque)
+
+    # =========================
+    # 2. EXTRAER USUARIO Y PUNTOS
+    # =========================
+
+    match = re.search(
+        r"([\w\d_]+)\s+ha\s+conseguido\s+([\d\.,]+)",
+        bloque
+    )
+
+    if not match:
+        print("❌ No se pudo extraer usuario/puntos")
+        await bot.process_commands(message)
+        return
+
+    usuario = match.group(1).strip().lower()
+    puntos = int(match.group(2).replace(".", "").replace(",", ""))
+
+    print("✔ USUARIO:", usuario)
     print("⭐ PUNTOS:", puntos)
 
     # =========================
@@ -124,7 +138,7 @@ async def on_message(message):
 
         conexion.commit()
 
-        print("💾 GUARDADO EN KURO OK")
+        print("💾 GUARDADO EN BASE DE DATOS")
 
         await message.channel.send(
             f"✅ {usuario} sumó {puntos:,} puntos en KURO."
@@ -136,77 +150,15 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # =========================
-# COMANDOS
+# COMANDO TEST
 # =========================
 
 @bot.command()
 async def ping(ctx):
     await ctx.send("pong")
 
-@bot.command()
-async def topkuro(ctx):
-
-    cursor.execute("""
-        SELECT usuario, puntos
-        FROM puntos_kuro
-        ORDER BY puntos DESC
-    """)
-
-    datos = cursor.fetchall()
-
-    if not datos:
-        return await ctx.send("No hay puntos en KURO.")
-
-    msg = "🏆 RANKING KURO 🏆\n\n"
-
-    for i, (u, p) in enumerate(datos, start=1):
-        msg += f"{i}. {u} → {p:,}\n"
-
-    await ctx.send(f"```{msg}```")
-
-@bot.command()
-async def puntoskuro(ctx, *, usuario):
-
-    usuario = usuario.strip().lower()
-
-    cursor.execute(
-        "SELECT puntos FROM puntos_kuro WHERE usuario = %s",
-        (usuario,)
-    )
-
-    res = cursor.fetchone()
-
-    if res:
-        await ctx.send(f"📊 {usuario} tiene {res[0]:,} puntos en KURO.")
-    else:
-        await ctx.send("Usuario no encontrado en KURO.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def resetkuro(ctx):
-
-    cursor.execute("DELETE FROM puntos_kuro")
-    conexion.commit()
-
-    await ctx.send("♻️ KURO reiniciado.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def borrarusuariokuro(ctx, *, usuario):
-
-    usuario = usuario.strip().lower()
-
-    cursor.execute(
-        "DELETE FROM puntos_kuro WHERE usuario = %s",
-        (usuario,)
-    )
-
-    conexion.commit()
-
-    await ctx.send(f"🗑️ {usuario} eliminado de KURO.")
-
 # =========================
-# RUN BOT
+# INICIAR BOT
 # =========================
 
 bot.run(TOKEN)
