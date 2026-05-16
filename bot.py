@@ -245,7 +245,7 @@ async def puntoskuro(ctx, usuario: str):
 async def simkuro(ctx):
 
     mensaje = """Informe del clan Kuro
-¡El clan Kuro ahora tiene 16,430,437 puntos de experiencia! Rosa_Melano ha conseguido 100.000 puntos para este clan
+¡El clan Kuro ahora tiene 16,430,437 puntos de experiencia! Crasty22 ha conseguido 100.000 puntos para este clan
 
 play.minelatino.com | Información del clan Kuro"""
 
