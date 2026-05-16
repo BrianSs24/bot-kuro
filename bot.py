@@ -62,13 +62,13 @@ async def on_ready():
 @bot.event
 async def on_message(message):
 
-    # ❌ ignorar bots (incluye el tuyo y otros)
+    # ignorar bots
     if message.author.bot:
         await bot.process_commands(message)
         return
 
     # =========================
-    # CONSTRUIR CONTENIDO
+    # CONSTRUIR TEXTO COMPLETO
     # =========================
 
     contenido = ""
@@ -92,17 +92,24 @@ async def on_message(message):
     print("📩 CONTENIDO DETECTADO:", contenido)
 
     # =========================
-    # REGEX MEJORADO
+    # REGEX ROBUSTO
     # =========================
 
-    patron = r"(.*?)\s+ha\s+conseguido\s+([\d\.]+)\s+puntos"
+    patron = r"([\w\W]+?)\s+ha\s+conseguido\s+([\d\.,]+)\s+puntos"
     resultado = re.search(patron, contenido, re.IGNORECASE)
 
     if resultado:
 
         usuario = resultado.group(1).strip()
 
-        puntos = int(resultado.group(2).replace(".", ""))
+        # =========================
+        # NORMALIZAR NÚMEROS
+        # =========================
+
+        puntos_raw = resultado.group(2)
+
+        puntos = puntos_raw.replace(".", "").replace(",", "")
+        puntos = int(puntos)
 
         print(f"🎯 MATCH: {usuario} + {puntos}")
 
@@ -168,7 +175,6 @@ async def on_message(message):
                 f"✅ {usuario} sumó {puntos:,} puntos en TNA."
             )
 
-    # IMPORTANTE
     await bot.process_commands(message)
 
 # =========================
