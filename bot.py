@@ -18,8 +18,7 @@ CANAL_KURO_ID = 1331359760414539791
 # =========================
 
 MINELATINO_BOTS = [
-    1331382760094306355,  # Bot 1 (cámbialo)
-    1331382760094306355   # Bot 2 (cámbialo)
+    1331382760094306355
 ]
 
 # =========================
@@ -45,7 +44,7 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# DB (SIN CURSOR GLOBAL)
+# DB FUNCTION (SIN CURSOR GLOBAL)
 # =========================
 
 def ejecutar(query, params=None):
@@ -102,56 +101,55 @@ def extraer_datos(texto):
     return usuario, puntos
 
 # =========================
-# MESSAGE EVENT (2 BOTS)
+# MESSAGE EVENT (FIX FINAL)
 # =========================
 
 @bot.event
 async def on_message(message):
 
-    # ❌ SOLO bots MineLatino permitidos
-    if message.author.id not in MINELATINO_BOTS:
+    # ❌ ignorar bots que NO sean MineLatino
+    if message.author.bot and message.author.id not in MINELATINO_BOTS:
         return
 
-    # SOLO canal KURO
-    if message.channel.id != CANAL_KURO_ID:
-        return
+    # =========================
+    # PROCESAR SOLO MINELATINO
+    # =========================
+    if message.author.id in MINELATINO_BOTS and message.channel.id == CANAL_KURO_ID:
 
-    contenido = message.content or ""
+        contenido = message.content or ""
 
-    for embed in message.embeds:
-        if embed.description:
-            contenido += " " + embed.description
+        for embed in message.embeds:
+            if embed.description:
+                contenido += " " + embed.description
 
-    print("\n====================")
-    print("📩 MENSAJE MINELATINO DETECTADO")
-    print("CONTENIDO:", contenido)
+        print("\n====================")
+        print("📩 MENSAJE MINELATINO DETECTADO")
+        print("CONTENIDO:", contenido)
 
-    usuario, puntos = extraer_datos(contenido)
+        usuario, puntos = extraer_datos(contenido)
 
-    if not usuario:
-        print("❌ NO SE PUDO EXTRAER DATA")
-        return
+        if usuario:
 
-    print("✔ USUARIO:", usuario)
-    print("⭐ PUNTOS:", puntos)
+            try:
+                ejecutar("""
+                    INSERT INTO puntos_kuro (usuario, puntos)
+                    VALUES (%s, %s)
+                    ON CONFLICT (usuario)
+                    DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
+                """, (usuario, puntos))
 
-    try:
-        ejecutar("""
-            INSERT INTO puntos_kuro (usuario, puntos)
-            VALUES (%s, %s)
-            ON CONFLICT (usuario)
-            DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
-        """, (usuario, puntos))
+                print("💾 GUARDADO OK")
 
-        print("💾 GUARDADO OK")
+                await message.channel.send(
+                    f"✅ {usuario} +{puntos:,} puntos KURO"
+                )
 
-        await message.channel.send(
-            f"✅ {usuario} +{puntos:,} puntos KURO"
-        )
+            except Exception as e:
+                print("❌ ERROR BD:", e)
 
-    except Exception as e:
-        print("❌ ERROR BD:", e)
-
+    # =========================
+    # SIEMPRE PERMITIR COMANDOS
+    # =========================
     await bot.process_commands(message)
 
 # =========================
