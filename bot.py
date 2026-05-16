@@ -25,7 +25,7 @@ MINELATINO_BOTS = [
 ]
 
 # =========================
-# ROLES PERMITIDOS
+# ROLES PRINCIPALES
 # =========================
 
 ALLOWED_ROLES = [
@@ -38,10 +38,21 @@ def tiene_permiso(ctx):
     return any(role.id in ALLOWED_ROLES for role in ctx.author.roles)
 
 # =========================
-# VERIFICAR CANAL CMD
+# VALIDAR CANAL CMD
+# Usuarios normales:
+# solo canal cmd
+#
+# Roles principales:
+# cualquier canal
 # =========================
 
-def canal_cmd(ctx):
+def puede_usar_comando(ctx):
+
+    # Roles permitidos = cualquier canal
+    if tiene_permiso(ctx):
+        return True
+
+    # Usuarios normales = solo canal cmd
     return ctx.channel.id == CANAL_CMD_ID
 
 # =========================
@@ -104,7 +115,7 @@ async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
 
 # =========================
-# EXTRACTOR
+# EXTRAER DATOS
 # =========================
 
 def extraer_datos(texto):
@@ -251,13 +262,11 @@ async def resettna(ctx):
 @bot.command()
 async def topkuro(ctx):
 
-    if ctx.channel.id != CANAL_CMD_ID:
-
-        if not tiene_permiso(ctx):
-            await ctx.send(
-                "❌ Solo puedes usar este comando en 『🤖』cmd."
-            )
-            return
+    if not puede_usar_comando(ctx):
+        await ctx.send(
+            "❌ Solo puedes usar este comando en 『🤖』cmd."
+        )
+        return
 
     data = ejecutar("""
         SELECT usuario, puntos
@@ -280,13 +289,11 @@ async def topkuro(ctx):
 @bot.command()
 async def toptna(ctx):
 
-    if ctx.channel.id != CANAL_CMD_ID:
-
-        if not tiene_permiso(ctx):
-            await ctx.send(
-                "❌ Solo puedes usar este comando en 『🤖』cmd."
-            )
-            return
+    if not puede_usar_comando(ctx):
+        await ctx.send(
+            "❌ Solo puedes usar este comando en 『🤖』cmd."
+        )
+        return
 
     data = ejecutar("""
         SELECT usuario, puntos
@@ -307,8 +314,13 @@ async def toptna(ctx):
 # =========================
 
 @bot.command()
-@commands.check(canal_cmd)
 async def puntoskuro(ctx, usuario: str):
+
+    if not puede_usar_comando(ctx):
+        await ctx.send(
+            "❌ Solo puedes usar este comando en 『🤖』cmd."
+        )
+        return
 
     data = ejecutar("""
         SELECT puntos
@@ -331,8 +343,13 @@ async def puntoskuro(ctx, usuario: str):
 # =========================
 
 @bot.command()
-@commands.check(canal_cmd)
 async def puntostna(ctx, usuario: str):
+
+    if not puede_usar_comando(ctx):
+        await ctx.send(
+            "❌ Solo puedes usar este comando en 『🤖』cmd."
+        )
+        return
 
     data = ejecutar("""
         SELECT puntos
