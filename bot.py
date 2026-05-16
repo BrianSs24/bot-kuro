@@ -175,7 +175,10 @@ async def on_message(message):
 async def ping(ctx):
     await ctx.send("pong")
 
-# 🔐 RESET SOLO ADMIN
+# =========================
+# RESET SOLO ADMIN
+# =========================
+
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def resetkuro(ctx):
@@ -190,13 +193,25 @@ async def resetkuro(ctx):
 
 # =========================
 # TOP KURO
-# TODOS LOS USUARIOS
-# SOLO EN CANAL CMD
+# Usuarios normales:
+# solo canal cmd
+#
+# Roles permitidos:
+# cualquier canal
 # =========================
 
 @bot.command()
-@commands.check(canal_cmd)
 async def topkuro(ctx):
+
+    # Si no está en el canal permitido
+    if ctx.channel.id != CANAL_CMD_ID:
+
+        # Verificar roles permitidos
+        if not tiene_permiso(ctx):
+            await ctx.send(
+                "❌ Solo puedes usar este comando en 『🤖』cmd."
+            )
+            return
 
     data = ejecutar("""
         SELECT usuario, puntos
@@ -214,6 +229,7 @@ async def topkuro(ctx):
 
 # =========================
 # PUNTOS INDIVIDUALES
+# SOLO CANAL CMD
 # =========================
 
 @bot.command()
@@ -245,7 +261,7 @@ async def puntoskuro(ctx, usuario: str):
 async def simkuro(ctx):
 
     mensaje = """Informe del clan Kuro
-¡El clan Kuro ahora tiene 16,430,437 puntos de experiencia! Crasty22 ha conseguido 100.000 puntos para este clan
+¡El clan Kuro ahora tiene 16,430,437 puntos de experiencia! Rosa_Melano ha conseguido 100.000 puntos para este clan
 
 play.minelatino.com | Información del clan Kuro"""
 
