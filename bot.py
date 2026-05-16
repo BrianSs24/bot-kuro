@@ -44,7 +44,7 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# DB FUNCTION (SIN CURSOR GLOBAL)
+# DB FUNCTION
 # =========================
 
 def ejecutar(query, params=None):
@@ -101,18 +101,18 @@ def extraer_datos(texto):
     return usuario, puntos
 
 # =========================
-# MESSAGE EVENT (FIX FINAL)
+# MESSAGE EVENT
 # =========================
 
 @bot.event
 async def on_message(message):
 
-    # ❌ ignorar bots que NO sean MineLatino
+    # ❌ ignorar bots no autorizados
     if message.author.bot and message.author.id not in MINELATINO_BOTS:
         return
 
     # =========================
-    # PROCESAR SOLO MINELATINO
+    # SOLO MINELATINO REAL
     # =========================
     if message.author.id in MINELATINO_BOTS and message.channel.id == CANAL_KURO_ID:
 
@@ -129,7 +129,6 @@ async def on_message(message):
         usuario, puntos = extraer_datos(contenido)
 
         if usuario:
-
             try:
                 ejecutar("""
                     INSERT INTO puntos_kuro (usuario, puntos)
@@ -147,9 +146,6 @@ async def on_message(message):
             except Exception as e:
                 print("❌ ERROR BD:", e)
 
-    # =========================
-    # SIEMPRE PERMITIR COMANDOS
-    # =========================
     await bot.process_commands(message)
 
 # =========================
@@ -196,6 +192,45 @@ async def topkuro(ctx):
         msg += f"{i}. {u} → {p:,}\n"
 
     await ctx.send(f"```{msg}```")
+
+# =========================
+# 🔥 SIMULACIÓN MINELATINO
+# =========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def simkuro(ctx):
+
+    mensaje = """Informe del clan Kuro
+¡El clan Kuro ahora tiene 16,430,437 puntos de experiencia! Rosa_Melano ha conseguido 100.000 puntos para este clan
+
+play.minelatino.com | Información del clan Kuro"""
+
+    # Simulación de mensaje real
+    class FakeAuthor:
+        def __init__(self):
+            self.bot = True
+            self.id = MINELATINO_BOTS[0]
+
+    class FakeChannel:
+        def __init__(self):
+            self.id = CANAL_KURO_ID
+
+        async def send(self, content):
+            print("📤 SIMULACIÓN ENVÍO:", content)
+
+    class FakeMessage:
+        def __init__(self):
+            self.author = FakeAuthor()
+            self.channel = FakeChannel()
+            self.content = mensaje
+            self.embeds = []
+
+    fake = FakeMessage()
+
+    await on_message(fake)
+
+    await ctx.send("🧪 Simulación de MineLatino ejecutada")
 
 # =========================
 # RUN
