@@ -17,12 +17,10 @@ CANAL_TNA_ID = 1339641817980866700
 CANAL_CMD_ID = 1278916162117177385
 
 # =========================
-# BOTS MINELATINO
+# NOMBRE EXACTO BOT MINELATINO
 # =========================
 
-MINELATINO_BOTS = [
-    1331382760094306355
-]
+MINELATINO_BOT_NAME = "MineLatino | Informe de clanes"
 
 # =========================
 # ROLES PRINCIPALES
@@ -141,74 +139,102 @@ def extraer_datos(texto):
 @bot.event
 async def on_message(message):
 
-    # Ignorar bots no autorizados
-    if message.author.bot and message.author.id not in MINELATINO_BOTS:
+    # =========================
+    # PROCESAR COMANDOS SIEMPRE
+    # =========================
+
+    await bot.process_commands(message)
+
+    # =========================
+    # IGNORAR USUARIOS NORMALES
+    # =========================
+
+    if not message.author.bot:
         return
 
     # =========================
-    # SOLO MINELATINO
+    # DETECTAR MINELATINO
     # =========================
 
-    if message.author.id in MINELATINO_BOTS:
+    es_minelatino = False
 
-        contenido = message.content or ""
+    # Detectar por nombre exacto
+    if message.author.name == MINELATINO_BOT_NAME:
+        es_minelatino = True
 
-        for embed in message.embeds:
-            if embed.description:
-                contenido += " " + embed.description
+    # Detectar por coincidencia parcial
+    if "MineLatino" in message.author.name:
+        es_minelatino = True
 
-        print("\n====================")
-        print("📩 MENSAJE MINELATINO DETECTADO")
-        print("CONTENIDO:", contenido)
+    # Si no es MineLatino -> ignorar
+    if not es_minelatino:
+        return
 
-        usuario, puntos = extraer_datos(contenido)
+    # =========================
+    # LEER CONTENIDO
+    # =========================
 
-        if usuario:
+    contenido = message.content or ""
 
-            try:
+    for embed in message.embeds:
+        if embed.description:
+            contenido += " " + embed.description
 
-                # =========================
-                # KURO
-                # =========================
+    print("\n====================")
+    print("📩 MENSAJE MINELATINO DETECTADO")
+    print("BOT:", message.author.name)
+    print("ID:", message.author.id)
+    print("CANAL:", message.channel.id)
+    print("CONTENIDO:", contenido)
 
-                if message.channel.id == CANAL_KURO_ID:
+    usuario, puntos = extraer_datos(contenido)
 
-                    ejecutar("""
-                        INSERT INTO puntos_kuro (usuario, puntos)
-                        VALUES (%s, %s)
-                        ON CONFLICT (usuario)
-                        DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
-                    """, (usuario, puntos))
+    if not usuario:
+        print("❌ NO SE PUDO EXTRAER USUARIO/PUNTOS")
+        return
 
-                    print("💾 KURO GUARDADO")
+    try:
 
-                    await message.channel.send(
-                        f"✅ {usuario} +{puntos:,} puntos KURO"
-                    )
+        # =========================
+        # KURO
+        # =========================
 
-                # =========================
-                # TNA
-                # =========================
+        if message.channel.id == CANAL_KURO_ID:
 
-                elif message.channel.id == CANAL_TNA_ID:
+            ejecutar("""
+                INSERT INTO puntos_kuro (usuario, puntos)
+                VALUES (%s, %s)
+                ON CONFLICT (usuario)
+                DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
+            """, (usuario, puntos))
 
-                    ejecutar("""
-                        INSERT INTO puntos_tna (usuario, puntos)
-                        VALUES (%s, %s)
-                        ON CONFLICT (usuario)
-                        DO UPDATE SET puntos = puntos_tna.puntos + EXCLUDED.puntos
-                    """, (usuario, puntos))
+            print("💾 KURO GUARDADO")
 
-                    print("💾 TNA GUARDADO")
+            await message.channel.send(
+                f"✅ {usuario} +{puntos:,} puntos KURO"
+            )
 
-                    await message.channel.send(
-                        f"✅ {usuario} +{puntos:,} puntos TNA"
-                    )
+        # =========================
+        # TNA
+        # =========================
 
-            except Exception as e:
-                print("❌ ERROR BD:", e)
+        elif message.channel.id == CANAL_TNA_ID:
 
-    await bot.process_commands(message)
+            ejecutar("""
+                INSERT INTO puntos_tna (usuario, puntos)
+                VALUES (%s, %s)
+                ON CONFLICT (usuario)
+                DO UPDATE SET puntos = puntos_tna.puntos + EXCLUDED.puntos
+            """, (usuario, puntos))
+
+            print("💾 TNA GUARDADO")
+
+            await message.channel.send(
+                f"✅ {usuario} +{puntos:,} puntos TNA"
+            )
+
+    except Exception as e:
+        print("❌ ERROR BD:", e)
 
 # =========================
 # COMMANDS
@@ -375,33 +401,7 @@ async def simkuro(ctx):
 
 play.minelatino.com | Información del clan Kuro"""
 
-    class FakeAuthor:
-        def __init__(self):
-            self.bot = True
-            self.id = MINELATINO_BOTS[0]
-
-    class FakeChannel:
-        def __init__(self, real_channel):
-            self.id = CANAL_KURO_ID
-            self.real_channel = real_channel
-
-        async def send(self, content):
-            await self.real_channel.send(content)
-
-    class FakeMessage:
-        def __init__(self):
-            self.author = FakeAuthor()
-            self.channel = FakeChannel(ctx.channel)
-            self.content = mensaje
-            self.embeds = []
-
-    fake = FakeMessage()
-
-    # Enviar mensaje tipo MineLatino
     await ctx.send(mensaje)
-
-    # Procesar mensaje
-    await on_message(fake)
 
 # =========================
 # SIMULACIÓN TNA
@@ -416,33 +416,7 @@ async def simtna(ctx):
 
 play.minelatino.com | Información del clan TNA"""
 
-    class FakeAuthor:
-        def __init__(self):
-            self.bot = True
-            self.id = MINELATINO_BOTS[0]
-
-    class FakeChannel:
-        def __init__(self, real_channel):
-            self.id = CANAL_TNA_ID
-            self.real_channel = real_channel
-
-        async def send(self, content):
-            await self.real_channel.send(content)
-
-    class FakeMessage:
-        def __init__(self):
-            self.author = FakeAuthor()
-            self.channel = FakeChannel(ctx.channel)
-            self.content = mensaje
-            self.embeds = []
-
-    fake = FakeMessage()
-
-    # Enviar mensaje tipo MineLatino
     await ctx.send(mensaje)
-
-    # Procesar mensaje
-    await on_message(fake)
 
 # =========================
 # RUN
