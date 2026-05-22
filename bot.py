@@ -139,34 +139,22 @@ def extraer_datos(texto):
 @bot.event
 async def on_message(message):
 
-    # =========================
-    # PROCESAR COMANDOS SIEMPRE
-    # =========================
-
+    # Procesar comandos siempre
     await bot.process_commands(message)
 
-    # =========================
-    # IGNORAR USUARIOS NORMALES
-    # =========================
-
+    # Ignorar usuarios normales
     if not message.author.bot:
         return
 
-    # =========================
-    # DETECTAR MINELATINO
-    # =========================
-
+    # Detectar MineLatino
     es_minelatino = False
 
-    # Detectar por nombre exacto
     if message.author.name == MINELATINO_BOT_NAME:
         es_minelatino = True
 
-    # Detectar por coincidencia parcial
     if "MineLatino" in message.author.name:
         es_minelatino = True
 
-    # Si no es MineLatino -> ignorar
     if not es_minelatino:
         return
 
@@ -177,8 +165,15 @@ async def on_message(message):
     contenido = message.content or ""
 
     for embed in message.embeds:
+
+        if embed.title:
+            contenido += " " + embed.title
+
         if embed.description:
             contenido += " " + embed.description
+
+        for field in embed.fields:
+            contenido += f" {field.name} {field.value}"
 
     print("\n====================")
     print("📩 MENSAJE MINELATINO DETECTADO")
@@ -293,15 +288,37 @@ async def topkuro(ctx):
         SELECT usuario, puntos
         FROM puntos_kuro
         ORDER BY puntos DESC
-        LIMIT 20
     """, fetch=True)
+
+    if not data:
+        await ctx.send("❌ No hay datos en KURO.")
+        return
 
     msg = "🏆 KURO TOP 🏆\n\n"
 
     for i, (u, p) in enumerate(data, 1):
         msg += f"{i}. {u} → {p:,}\n"
 
-    await ctx.send(f"```{msg}```")
+    if len(msg) > 1900:
+
+        partes = []
+        actual = ""
+
+        for linea in msg.split("\n"):
+
+            if len(actual) + len(linea) > 1900:
+                partes.append(actual)
+                actual = ""
+
+            actual += linea + "\n"
+
+        partes.append(actual)
+
+        for parte in partes:
+            await ctx.send(f"```{parte}```")
+
+    else:
+        await ctx.send(f"```{msg}```")
 
 # =========================
 # TOP TNA
@@ -320,15 +337,37 @@ async def toptna(ctx):
         SELECT usuario, puntos
         FROM puntos_tna
         ORDER BY puntos DESC
-        LIMIT 20
     """, fetch=True)
+
+    if not data:
+        await ctx.send("❌ No hay datos en TNA.")
+        return
 
     msg = "🏆 TNA TOP 🏆\n\n"
 
     for i, (u, p) in enumerate(data, 1):
         msg += f"{i}. {u} → {p:,}\n"
 
-    await ctx.send(f"```{msg}```")
+    if len(msg) > 1900:
+
+        partes = []
+        actual = ""
+
+        for linea in msg.split("\n"):
+
+            if len(actual) + len(linea) > 1900:
+                partes.append(actual)
+                actual = ""
+
+            actual += linea + "\n"
+
+        partes.append(actual)
+
+        for parte in partes:
+            await ctx.send(f"```{parte}```")
+
+    else:
+        await ctx.send(f"```{msg}```")
 
 # =========================
 # PUNTOS KURO
@@ -386,6 +425,54 @@ async def puntostna(ctx, usuario: str):
 
     await ctx.send(
         f"🏆 {usuario} tiene {puntos:,} puntos TNA."
+    )
+
+# =========================
+# TOTAL GENERAL KURO
+# =========================
+
+@bot.command()
+async def totalkuro(ctx):
+
+    if not puede_usar_comando(ctx):
+        await ctx.send(
+            "❌ Solo puedes usar este comando en 『🤖』cmd."
+        )
+        return
+
+    data = ejecutar("""
+        SELECT SUM(puntos)
+        FROM puntos_kuro
+    """, fetch=True)
+
+    total = data[0][0] or 0
+
+    await ctx.send(
+        f"🏆 Total general KURO: {total:,} puntos."
+    )
+
+# =========================
+# TOTAL GENERAL TNA
+# =========================
+
+@bot.command()
+async def totaltna(ctx):
+
+    if not puede_usar_comando(ctx):
+        await ctx.send(
+            "❌ Solo puedes usar este comando en 『🤖』cmd."
+        )
+        return
+
+    data = ejecutar("""
+        SELECT SUM(puntos)
+        FROM puntos_tna
+    """, fetch=True)
+
+    total = data[0][0] or 0
+
+    await ctx.send(
+        f"🏆 Total general TNA: {total:,} puntos."
     )
 
 # =========================
