@@ -32,12 +32,19 @@ ALLOWED_ROLES = [
     1157136068613767268
 ]
 
-def tiene_permiso(ctx):
-    return any(role.id in ALLOWED_ROLES for role in ctx.author.roles)
+# =========================
+# TOTALES GENERALES CLANES
+# =========================
+
+TOTAL_CLAN_KURO = 0
+TOTAL_CLAN_TNA = 0
 
 # =========================
-# VALIDAR CANAL CMD
+# FUNCIONES
 # =========================
+
+def tiene_permiso(ctx):
+    return any(role.id in ALLOWED_ROLES for role in ctx.author.roles)
 
 def puede_usar_comando(ctx):
 
@@ -128,7 +135,12 @@ def extraer_datos(texto):
         return None, None
 
     usuario = match.group(1).lower()
-    puntos = int(match.group(2).replace(".", "").replace(",", ""))
+
+    puntos = int(
+        match.group(2)
+        .replace(".", "")
+        .replace(",", "")
+    )
 
     return usuario, puntos
 
@@ -138,6 +150,9 @@ def extraer_datos(texto):
 
 @bot.event
 async def on_message(message):
+
+    global TOTAL_CLAN_KURO
+    global TOTAL_CLAN_TNA
 
     # Procesar comandos siempre
     await bot.process_commands(message)
@@ -196,6 +211,20 @@ async def on_message(message):
 
         if message.channel.id == CANAL_KURO_ID:
 
+            total_match = re.search(
+                r"ahora tiene\s+([\d\.,]+)",
+                contenido,
+                re.IGNORECASE
+            )
+
+            if total_match:
+
+                TOTAL_CLAN_KURO = int(
+                    total_match.group(1)
+                    .replace(".", "")
+                    .replace(",", "")
+                )
+
             ejecutar("""
                 INSERT INTO puntos_kuro (usuario, puntos)
                 VALUES (%s, %s)
@@ -214,6 +243,20 @@ async def on_message(message):
         # =========================
 
         elif message.channel.id == CANAL_TNA_ID:
+
+            total_match = re.search(
+                r"ahora tiene\s+([\d\.,]+)",
+                contenido,
+                re.IGNORECASE
+            )
+
+            if total_match:
+
+                TOTAL_CLAN_TNA = int(
+                    total_match.group(1)
+                    .replace(".", "")
+                    .replace(",", "")
+                )
 
             ejecutar("""
                 INSERT INTO puntos_tna (usuario, puntos)
@@ -279,9 +322,11 @@ async def resettna(ctx):
 async def topkuro(ctx):
 
     if not puede_usar_comando(ctx):
+
         await ctx.send(
             "❌ Solo puedes usar este comando en 『🤖』cmd."
         )
+
         return
 
     data = ejecutar("""
@@ -328,9 +373,11 @@ async def topkuro(ctx):
 async def toptna(ctx):
 
     if not puede_usar_comando(ctx):
+
         await ctx.send(
             "❌ Solo puedes usar este comando en 『🤖』cmd."
         )
+
         return
 
     data = ejecutar("""
@@ -370,61 +417,95 @@ async def toptna(ctx):
         await ctx.send(f"```{msg}```")
 
 # =========================
-# PUNTOS KURO
+# PUNTOS KURO + POSICIÓN
 # =========================
 
 @bot.command()
 async def puntoskuro(ctx, usuario: str):
 
     if not puede_usar_comando(ctx):
+
         await ctx.send(
             "❌ Solo puedes usar este comando en 『🤖』cmd."
         )
+
         return
 
     data = ejecutar("""
-        SELECT puntos
+        SELECT usuario, puntos
         FROM puntos_kuro
-        WHERE usuario = %s
-    """, (usuario.lower(),), fetch=True)
+        ORDER BY puntos DESC
+    """, fetch=True)
 
     if not data:
+        await ctx.send("❌ No hay datos en KURO.")
+        return
+
+    usuario = usuario.lower()
+
+    posicion = None
+    puntos = None
+
+    for i, (u, p) in enumerate(data, 1):
+
+        if u == usuario:
+            posicion = i
+            puntos = p
+            break
+
+    if posicion is None:
         await ctx.send("❌ Usuario no encontrado.")
         return
 
-    puntos = data[0][0]
-
     await ctx.send(
-        f"🏆 {usuario} tiene {puntos:,} puntos KURO."
+        f"🏆 {usuario} tiene {puntos:,} puntos KURO.\n"
+        f"📊 Posición en el top: #{posicion}"
     )
 
 # =========================
-# PUNTOS TNA
+# PUNTOS TNA + POSICIÓN
 # =========================
 
 @bot.command()
 async def puntostna(ctx, usuario: str):
 
     if not puede_usar_comando(ctx):
+
         await ctx.send(
             "❌ Solo puedes usar este comando en 『🤖』cmd."
         )
+
         return
 
     data = ejecutar("""
-        SELECT puntos
+        SELECT usuario, puntos
         FROM puntos_tna
-        WHERE usuario = %s
-    """, (usuario.lower(),), fetch=True)
+        ORDER BY puntos DESC
+    """, fetch=True)
 
     if not data:
+        await ctx.send("❌ No hay datos en TNA.")
+        return
+
+    usuario = usuario.lower()
+
+    posicion = None
+    puntos = None
+
+    for i, (u, p) in enumerate(data, 1):
+
+        if u == usuario:
+            posicion = i
+            puntos = p
+            break
+
+    if posicion is None:
         await ctx.send("❌ Usuario no encontrado.")
         return
 
-    puntos = data[0][0]
-
     await ctx.send(
-        f"🏆 {usuario} tiene {puntos:,} puntos TNA."
+        f"🏆 {usuario} tiene {puntos:,} puntos TNA.\n"
+        f"📊 Posición en el top: #{posicion}"
     )
 
 # =========================
@@ -435,9 +516,11 @@ async def puntostna(ctx, usuario: str):
 async def totalkuro(ctx):
 
     if not puede_usar_comando(ctx):
+
         await ctx.send(
             "❌ Solo puedes usar este comando en 『🤖』cmd."
         )
+
         return
 
     data = ejecutar("""
@@ -445,10 +528,11 @@ async def totalkuro(ctx):
         FROM puntos_kuro
     """, fetch=True)
 
-    total = data[0][0] or 0
+    total_bd = data[0][0] or 0
 
     await ctx.send(
-        f"🏆 Total general KURO: {total:,} puntos."
+        f"🏆 Total sumado KURO: {total_bd:,} puntos.\n"
+        f"🌎 Total general del clan: {TOTAL_CLAN_KURO:,} puntos."
     )
 
 # =========================
@@ -459,9 +543,11 @@ async def totalkuro(ctx):
 async def totaltna(ctx):
 
     if not puede_usar_comando(ctx):
+
         await ctx.send(
             "❌ Solo puedes usar este comando en 『🤖』cmd."
         )
+
         return
 
     data = ejecutar("""
@@ -469,10 +555,11 @@ async def totaltna(ctx):
         FROM puntos_tna
     """, fetch=True)
 
-    total = data[0][0] or 0
+    total_bd = data[0][0] or 0
 
     await ctx.send(
-        f"🏆 Total general TNA: {total:,} puntos."
+        f"🏆 Total sumado TNA: {total_bd:,} puntos.\n"
+        f"🌎 Total general del clan: {TOTAL_CLAN_TNA:,} puntos."
     )
 
 # =========================
