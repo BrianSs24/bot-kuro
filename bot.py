@@ -164,19 +164,18 @@ async def on_message(message):
     if not message.author.bot:
         return
 
-    # Detectar MineLatino
     # Detectar bots permitidos
 
     bot_valido = False
 
-      for nombre in BOTS_PERMITIDOS:
+for nombre in BOTS_PERMITIDOS:
 
-         if nombre.lower() in message.author.name.lower():
-         bot_valido = True
-         break
+    if nombre.lower() in message.author.name.lower():
+        bot_valido = True
+        break
 
-         if not bot_valido:
-         return
+if not bot_valido:
+    return
 
     # =========================
     # LEER CONTENIDO
