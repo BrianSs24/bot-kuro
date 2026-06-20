@@ -20,7 +20,10 @@ CANAL_CMD_ID = 1278916162117177385
 # NOMBRE EXACTO BOT MINELATINO
 # =========================
 
-MINELATINO_BOT_NAME = "MineLatino | Informe de clanes"
+BOTS_PERMITIDOS = [
+    "MineLatino",
+    "Ultimate Clans V7"
+]
 
 # =========================
 # ROLES PRINCIPALES
@@ -162,16 +165,18 @@ async def on_message(message):
         return
 
     # Detectar MineLatino
-    es_minelatino = False
+    # Detectar bots permitidos
 
-    if message.author.name == MINELATINO_BOT_NAME:
-        es_minelatino = True
+    bot_valido = False
 
-    if "MineLatino" in message.author.name:
-        es_minelatino = True
+      for nombre in BOTS_PERMITIDOS:
 
-    if not es_minelatino:
-        return
+         if nombre.lower() in message.author.name.lower():
+         bot_valido = True
+         break
+
+         if not bot_valido:
+         return
 
     # =========================
     # LEER CONTENIDO
