@@ -123,24 +123,33 @@ async def on_ready():
 
 def extraer_datos(texto):
 
-match_nuevo = re.search(
-    r"\(([A-Za-z0-9_]+)\s+\+([\d\.,]+)\s+XP",
-    texto,
-    re.IGNORECASE
-)
+    # =========================
+    # FORMATO NUEVO
+    # (deodann +900 XP | Total: 11400)
+    # =========================
 
-if match_nuevo:
-
-    usuario = match_nuevo.group(1).lower()
-
-    puntos = int(
-        match_nuevo.group(2)
-        .replace(".", "")
-        .replace(",", "")
+    match_nuevo = re.search(
+        r"\(([A-Za-z0-9_]+)\s+\+([\d\.,]+)\s+XP",
+        texto,
+        re.IGNORECASE
     )
 
-    return usuario, puntos
-    
+    if match_nuevo:
+
+        usuario = match_nuevo.group(1).lower()
+
+        puntos = int(
+            match_nuevo.group(2)
+            .replace(".", "")
+            .replace(",", "")
+        )
+
+        return usuario, puntos
+
+    # =========================
+    # FORMATO ANTIGUO
+    # =========================
+
     match_parentesis = re.search(r"\((.*?)\)", texto)
 
     if match_parentesis:
