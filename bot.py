@@ -123,6 +123,24 @@ async def on_ready():
 
 def extraer_datos(texto):
 
+match_nuevo = re.search(
+    r"\(([A-Za-z0-9_]+)\s+\+([\d\.,]+)\s+XP",
+    texto,
+    re.IGNORECASE
+)
+
+if match_nuevo:
+
+    usuario = match_nuevo.group(1).lower()
+
+    puntos = int(
+        match_nuevo.group(2)
+        .replace(".", "")
+        .replace(",", "")
+    )
+
+    return usuario, puntos
+    
     match_parentesis = re.search(r"\((.*?)\)", texto)
 
     if match_parentesis:
@@ -153,7 +171,7 @@ async def on_message(message):
 
     global TOTAL_CLAN_KURO
     global TOTAL_CLAN_TNA
-
+        
     # Procesar comandos siempre
     await bot.process_commands(message)
 
@@ -224,7 +242,11 @@ async def on_message(message):
                     .replace(".", "")
                     .replace(",", "")
                 )
-
+                total_match = re.search(
+                r"ahora tiene\s+([\d\.,]+)\s+puntos",
+                contenido,
+                re.IGNORECASE
+                )
             ejecutar("""
                 INSERT INTO puntos_kuro (usuario, puntos)
                 VALUES (%s, %s)
