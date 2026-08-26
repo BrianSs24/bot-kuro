@@ -132,18 +132,23 @@ def extraer_datos(texto):
         re.IGNORECASE
     )
 
-    if match_nuevo:
+    match_nuevo = re.search(
+    r"\(\.?([A-Za-z0-9_]+)\s+\+([\d\.,]+)\s+XP",
+    texto,
+    re.IGNORECASE
+)
 
-        usuario = match_nuevo.group(1).lower()
+if match_nuevo:
 
-        puntos = int(
-            match_nuevo.group(2)
-            .replace(".", "")
-            .replace(",", "")
-        )
+    usuario = match_nuevo.group(1).lower()
 
-        return usuario, puntos
+    puntos = int(
+        match_nuevo.group(2)
+        .replace(".", "")
+        .replace(",", "")
+    )
 
+    return usuario, puntos
     # Formato antiguo:
     # usuario ha conseguido 10.000 puntos
     match_antiguo = re.search(
