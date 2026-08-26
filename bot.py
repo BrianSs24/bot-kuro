@@ -123,8 +123,11 @@ async def on_ready():
 
 def extraer_datos(texto):
 
+    # Formato nuevo:
+    # (usuario +10.000 XP | Total: 50000)
+    # (usuario +10.000 XP | Total: INVALID_TYPE)
     match_nuevo = re.search(
-        r"\(([A-Za-z0-9_]+)\s+\+([\d\.,]+)\s+XP",
+        r"\(([A-Za-z0-9_.]+)\s*\+([\d.,]+)\s*XP\b",
         texto,
         re.IGNORECASE
     )
@@ -141,30 +144,27 @@ def extraer_datos(texto):
 
         return usuario, puntos
 
-    match_parentesis = re.search(r"\((.*?)\)", texto)
-
-    if match_parentesis:
-        texto = match_parentesis.group(1)
-
-    match = re.search(
-        r"([\w\d_]+)\s+ha\s+conseguido\s+([\d\.,]+)",
+    # Formato antiguo:
+    # usuario ha conseguido 10.000 puntos
+    match_antiguo = re.search(
+        r"([\w\d_.]+)\s+ha\s+conseguido\s+([\d.,]+)",
         texto,
         re.IGNORECASE
     )
 
-    if not match:
-        return None, None
+    if match_antiguo:
 
-    usuario = match.group(1).lower()
+        usuario = match_antiguo.group(1).lower()
 
-    puntos = int(
-        match.group(2)
-        .replace(".", "")
-        .replace(",", "")
-    )
+        puntos = int(
+            match_antiguo.group(2)
+            .replace(".", "")
+            .replace(",", "")
+        )
 
-    return usuario, puntos
+        return usuario, puntos
 
+    return None, None
 
 @bot.event
 async def on_message(message):
