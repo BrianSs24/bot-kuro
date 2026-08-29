@@ -1,8 +1,10 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import psycopg2
 import re
 import os
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 # =========================
 # CONFIG
@@ -41,6 +43,25 @@ ALLOWED_ROLES = [
 
 TOTAL_CLAN_KURO = 0
 TOTAL_CLAN_TNA = 0
+
+# =========================
+# CONFIGURACIÓN SEMANAL
+# =========================
+
+TZ = ZoneInfo("America/Santo_Domingo")
+# Domingo a las 23:59:59, hora de República Dominicana.
+DIA_FIN_SEMANA = 6
+HORA_FIN_SEMANA = 23
+MINUTO_FIN_SEMANA = 59
+
+# True = sistema semanal activo. False = no acumula ni cierra semanas.
+SEMANA_ACTIVA = True
+
+# Tablas que se publican al finalizar la semana:
+# "kuro" = solo Kuro
+# "tna" = solo TNA
+# "ambas" = Kuro y TNA
+TABLAS_AL_FINALIZAR = "tna"
 
 # =========================
 # FUNCIONES
@@ -108,6 +129,174 @@ CREATE TABLE IF NOT EXISTS puntos_tna (
     puntos BIGINT DEFAULT 0
 )
 """)
+ejecutar("""
+CREATE TABLE IF NOT EXISTS puntos_kuro_semanal (
+    usuario TEXT PRIMARY KEY,
+    puntos BIGINT DEFAULT 0
+)
+""")
+
+ejecutar("""
+CREATE TABLE IF NOT EXISTS puntos_tna_semanal (
+    usuario TEXT PRIMARY KEY,
+    puntos BIGINT DEFAULT 0
+)
+""")
+
+ejecutar("""
+CREATE TABLE IF NOT EXISTS estado_semanal (
+    id INTEGER PRIMARY KEY,
+    inicio TIMESTAMPTZ NOT NULL,
+    fin TIMESTAMPTZ NOT NULL
+)
+""")
+
+# =========================
+# SISTEMA SEMANAL
+# =========================
+
+def calcular_fin_semana():
+    ahora = datetime.now(TZ)
+    dias = (DIA_FIN_SEMANA - ahora.weekday()) % 7
+    fin = (ahora + timedelta(days=dias)).replace(
+        hour=HORA_FIN_SEMANA,
+        minute=MINUTO_FIN_SEMANA,
+        second=59,
+        microsecond=999999
+    )
+    if fin <= ahora:
+        fin += timedelta(days=7)
+    return fin
+
+
+def inicializar_periodo_semanal():
+    data = ejecutar(
+        "SELECT inicio, fin FROM estado_semanal WHERE id = 1",
+        fetch=True
+    )
+
+    if not data:
+        fin = calcular_fin_semana()
+        inicio = fin - timedelta(days=7) + timedelta(microseconds=1)
+        ejecutar("""
+            INSERT INTO estado_semanal (id, inicio, fin)
+            VALUES (1, %s, %s)
+        """, (inicio, fin))
+        return inicio, fin
+
+    inicio, fin = data[0]
+    if inicio.tzinfo is None:
+        inicio = inicio.replace(tzinfo=TZ)
+    if fin.tzinfo is None:
+        fin = fin.replace(tzinfo=TZ)
+    return inicio.astimezone(TZ), fin.astimezone(TZ)
+
+
+async def comprobar_cierre_semanal():
+    if not SEMANA_ACTIVA:
+        return
+
+    ahora = datetime.now(TZ)
+    inicio, fin = inicializar_periodo_semanal()
+
+    if ahora < fin:
+        return
+
+    # Obtener los TOP antes de borrar los datos.
+    kuro = ejecutar("""
+        SELECT usuario, puntos
+        FROM puntos_kuro_semanal
+        ORDER BY puntos DESC
+    """, fetch=True)
+
+    tna = ejecutar("""
+        SELECT usuario, puntos
+        FROM puntos_tna_semanal
+        ORDER BY puntos DESC
+    """, fetch=True)
+
+    def construir_top(titulo, data):
+        if not data:
+            return f"🏆 **{titulo}**\\n\\nNo hubo puntos registrados esta semana.\\n"
+
+        texto = f"🏆 **{titulo}**\\n\\n"
+        for i, (usuario, puntos) in enumerate(data, 1):
+            texto += f"{i}. {usuario} → {puntos:,}\\n"
+        return texto
+
+    seleccion = TABLAS_AL_FINALIZAR.lower().strip()
+
+    if seleccion == "kuro":
+        bloques = [construir_top("KURO — TOP SEMANAL", kuro)]
+    elif seleccion == "tna":
+        bloques = [construir_top("TNA — TOP SEMANAL", tna)]
+    elif seleccion == "ambas":
+        bloques = [
+            construir_top("KURO — TOP SEMANAL", kuro),
+            construir_top("TNA — TOP SEMANAL", tna)
+        ]
+    else:
+        print(f"⚠️ TABLAS_AL_FINALIZAR='{TABLAS_AL_FINALIZAR}' no es válida. Se usará TNA.")
+        bloques = [construir_top("TNA — TOP SEMANAL", tna)]
+
+    mensaje_inicial = (
+        "🏁 **TABLA DE PUNTOS SEMANAL FINALIZADA** 🏁\\n\\n"
+        "La acumulación de puntos de esta semana ha terminado."
+    )
+
+    mensaje_final = "♻️ Las puntuaciones semanales serán reiniciadas ahora."
+
+    # Enviar el resultado final antes de borrar los datos.
+    for canal_id in (CANAL_KURO_ID, CANAL_TNA_ID):
+        canal = bot.get_channel(canal_id)
+        if canal:
+            try:
+                partes = [mensaje_inicial] + bloques + [mensaje_final]
+
+                for parte in partes:
+                    if len(parte) <= 1900:
+                        await canal.send(parte)
+                    else:
+                        actual = ""
+                        for linea in parte.splitlines():
+                            if len(actual) + len(linea) + 1 > 1900:
+                                await canal.send(actual)
+                                actual = ""
+                            actual += linea + "\\n"
+                        if actual:
+                            await canal.send(actual)
+
+            except Exception as e:
+                print("❌ ERROR ENVIANDO TOP SEMANAL FINAL:", e)
+
+    # Ahora sí se reinician únicamente las tablas semanales.
+    ejecutar("DELETE FROM puntos_kuro_semanal")
+    ejecutar("DELETE FROM puntos_tna_semanal")
+
+    nuevo_inicio = fin + timedelta(microseconds=1)
+    nuevo_fin = nuevo_inicio + timedelta(days=7) - timedelta(microseconds=1)
+
+    ejecutar("""
+        UPDATE estado_semanal
+        SET inicio = %s, fin = %s
+        WHERE id = 1
+    """, (nuevo_inicio, nuevo_fin))
+
+    print("♻️ SEMANA CERRADA: TOP PUBLICADO Y PUNTOS SEMANALES REINICIADOS")
+
+
+@tasks.loop(minutes=1)
+async def revisar_semana():
+    try:
+        await comprobar_cierre_semanal()
+    except Exception as e:
+        print("❌ ERROR REVISANDO SEMANA:", e)
+
+
+@revisar_semana.before_loop
+async def antes_de_revisar_semana():
+    await bot.wait_until_ready()
+    inicializar_periodo_semanal()
 
 # =========================
 # READY
@@ -116,6 +305,9 @@ CREATE TABLE IF NOT EXISTS puntos_tna (
 @bot.event
 async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
+
+    if not revisar_semana.is_running():
+        revisar_semana.start()
 
 # =========================
 # EXTRAER DATOS
@@ -259,7 +451,15 @@ async def on_message(message):
                 DO UPDATE SET puntos = puntos_kuro.puntos + EXCLUDED.puntos
             """, (usuario, puntos))
 
-            print("💾 KURO GUARDADO")
+            if SEMANA_ACTIVA:
+                ejecutar("""
+                    INSERT INTO puntos_kuro_semanal (usuario, puntos)
+                    VALUES (%s, %s)
+                    ON CONFLICT (usuario)
+                    DO UPDATE SET puntos = puntos_kuro_semanal.puntos + EXCLUDED.puntos
+                """, (usuario, puntos))
+
+            print("💾 KURO GUARDADO (GENERAL + SEMANAL)")
 
             await message.channel.send(
                 f"✅ {usuario} +{puntos:,} puntos KURO"
@@ -292,7 +492,15 @@ async def on_message(message):
                 DO UPDATE SET puntos = puntos_tna.puntos + EXCLUDED.puntos
             """, (usuario, puntos))
 
-            print("💾 TNA GUARDADO")
+            if SEMANA_ACTIVA:
+                ejecutar("""
+                    INSERT INTO puntos_tna_semanal (usuario, puntos)
+                    VALUES (%s, %s)
+                    ON CONFLICT (usuario)
+                    DO UPDATE SET puntos = puntos_tna_semanal.puntos + EXCLUDED.puntos
+                """, (usuario, puntos))
+
+            print("💾 TNA GUARDADO (GENERAL + SEMANAL)")
 
             await message.channel.send(
                 f"✅ {usuario} +{puntos:,} puntos TNA"
@@ -588,6 +796,229 @@ async def totaltna(ctx):
         f"🏆 Total sumado TNA: {total_bd:,} puntos.\n"
         f"🌎 Total general del clan: {TOTAL_CLAN_TNA:,} puntos."
     )
+
+# =========================
+# TOP SEMANAL
+# =========================
+
+async def enviar_top_semanal(ctx, tabla, titulo):
+    data = ejecutar(
+        f"SELECT usuario, puntos FROM {tabla} ORDER BY puntos DESC",
+        fetch=True
+    )
+
+    if not data:
+        await ctx.send(f"❌ No hay datos semanales en {titulo}.")
+        return
+
+    msg = f"🏆 {titulo} TOP SEMANAL 🏆\n\n"
+    for i, (u, p) in enumerate(data, 1):
+        msg += f"{i}. {u} → {p:,}\n"
+
+    if len(msg) <= 1900:
+        await ctx.send(f"```{msg}```")
+        return
+
+    actual = ""
+    for linea in msg.splitlines():
+        if len(actual) + len(linea) + 1 > 1900:
+            await ctx.send(f"```{actual}```")
+            actual = ""
+        actual += linea + "\n"
+    if actual:
+        await ctx.send(f"```{actual}```")
+
+
+@bot.command()
+async def topkurosemanal(ctx):
+    if not SEMANA_ACTIVA:
+        await ctx.send("⚠️ El sistema de puntos semanal está desactivado.")
+        return
+    if not puede_usar_comando(ctx):
+        await ctx.send("❌ Solo puedes usar este comando en 『🤖』cmd.")
+        return
+    await enviar_top_semanal(ctx, "puntos_kuro_semanal", "KURO")
+
+
+@bot.command()
+async def toptnasemanal(ctx):
+    if not SEMANA_ACTIVA:
+        await ctx.send("⚠️ El sistema de puntos semanal está desactivado.")
+        return
+    if not puede_usar_comando(ctx):
+        await ctx.send("❌ Solo puedes usar este comando en 『🤖』cmd.")
+        return
+    await enviar_top_semanal(ctx, "puntos_tna_semanal", "TNA")
+
+
+@bot.command()
+async def puntoskurosemanal(ctx, usuario: str):
+    if not SEMANA_ACTIVA:
+        await ctx.send("⚠️ El sistema de puntos semanal está desactivado.")
+        return
+    if not puede_usar_comando(ctx):
+        await ctx.send("❌ Solo puedes usar este comando en 『🤖』cmd.")
+        return
+
+    data = ejecutar("""
+        SELECT usuario, puntos FROM puntos_kuro_semanal
+        ORDER BY puntos DESC
+    """, fetch=True)
+
+    usuario = usuario.lower()
+    for i, (u, p) in enumerate(data, 1):
+        if u == usuario:
+            await ctx.send(
+                f"🏆 {usuario} tiene {p:,} puntos KURO esta semana.\n"
+                f"📊 Posición semanal: #{i}"
+            )
+            return
+
+    await ctx.send("❌ Usuario no encontrado en el ranking semanal KURO.")
+
+
+@bot.command()
+async def puntostnasemanal(ctx, usuario: str):
+    if not SEMANA_ACTIVA:
+        await ctx.send("⚠️ El sistema de puntos semanal está desactivado.")
+        return
+    if not puede_usar_comando(ctx):
+        await ctx.send("❌ Solo puedes usar este comando en 『🤖』cmd.")
+        return
+
+    data = ejecutar("""
+        SELECT usuario, puntos FROM puntos_tna_semanal
+        ORDER BY puntos DESC
+    """, fetch=True)
+
+    usuario = usuario.lower()
+    for i, (u, p) in enumerate(data, 1):
+        if u == usuario:
+            await ctx.send(
+                f"🏆 {usuario} tiene {p:,} puntos TNA esta semana.\n"
+                f"📊 Posición semanal: #{i}"
+            )
+            return
+
+    await ctx.send("❌ Usuario no encontrado en el ranking semanal TNA.")
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def resetsemanal(ctx):
+    try:
+        ejecutar("DELETE FROM puntos_kuro_semanal")
+        ejecutar("DELETE FROM puntos_tna_semanal")
+
+        fin = calcular_fin_semana()
+        inicio = fin - timedelta(days=7) + timedelta(microseconds=1)
+
+        ejecutar("""
+            INSERT INTO estado_semanal (id, inicio, fin)
+            VALUES (1, %s, %s)
+            ON CONFLICT (id)
+            DO UPDATE SET inicio = EXCLUDED.inicio, fin = EXCLUDED.fin
+        """, (inicio, fin))
+
+        await ctx.send("♻️ Puntuaciones semanales de KURO y TNA reiniciadas.")
+    except Exception as e:
+        await ctx.send("❌ Error al reiniciar las puntuaciones semanales.")
+        print("❌ ERROR RESET SEMANAL:", e)
+
+
+@bot.command()
+async def semanainfo(ctx):
+    if not SEMANA_ACTIVA:
+        await ctx.send("⚠️ El sistema de puntos semanal está desactivado.")
+        return
+    if not puede_usar_comando(ctx):
+        await ctx.send("❌ Solo puedes usar este comando en 『🤖』cmd.")
+        return
+
+    inicio, fin = inicializar_periodo_semanal()
+    restante = max(fin - datetime.now(TZ), timedelta(0))
+    dias = restante.days
+    horas, resto = divmod(restante.seconds, 3600)
+    minutos = resto // 60
+
+    await ctx.send(
+        "📅 **SEMANA ACTUAL**\n"
+        f"🟢 Inicio: {inicio.strftime('%d/%m/%Y %H:%M')}\n"
+        f"🔴 Finaliza: {fin.strftime('%d/%m/%Y %H:%M')}\n"
+        f"⏳ Tiempo restante: {dias}d {horas}h {minutos}m"
+    )
+
+# =========================
+# ACTIVAR / DESACTIVAR SEMANAL
+# =========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def activarsemanal(ctx):
+    global SEMANA_ACTIVA
+    SEMANA_ACTIVA = True
+    inicializar_periodo_semanal()
+    await ctx.send("✅ Sistema de puntos semanal **ACTIVADO**.")
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def desactivarsemanal(ctx):
+    global SEMANA_ACTIVA
+    SEMANA_ACTIVA = False
+    await ctx.send(
+        "⏸️ Sistema de puntos semanal **DESACTIVADO**. "
+        "Los puntos generales seguirán funcionando normalmente."
+    )
+
+
+# =========================
+# CONFIGURAR TABLA FINAL
+# =========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def tablasemanalfinal(ctx, opcion: str):
+    global TABLAS_AL_FINALIZAR
+
+    opcion = opcion.lower().strip()
+
+    opciones = {
+        "kuro": "kuro",
+        "tna": "tna",
+        "ambas": "ambas",
+    }
+
+    if opcion not in opciones:
+        await ctx.send(
+            "❌ Opción inválida. Usa:\n"
+            "`!tablasemanalfinal kuro` → solo KURO\n"
+            "`!tablasemanalfinal tna` → solo TNA\n"
+            "`!tablasemanalfinal ambas` → KURO + TNA"
+        )
+        return
+
+    TABLAS_AL_FINALIZAR = opciones[opcion]
+
+    await ctx.send(
+        f"✅ Tabla(s) al finalizar configuradas: **{TABLAS_AL_FINALIZAR.upper()}**"
+    )
+
+
+@bot.command()
+async def configsemanal(ctx):
+    if not puede_usar_comando(ctx):
+        await ctx.send("❌ Solo puedes usar este comando en 『🤖』cmd.")
+        return
+
+    estado = "ACTIVADO" if SEMANA_ACTIVA else "DESACTIVADO"
+
+    await ctx.send(
+        "⚙️ **CONFIGURACIÓN SEMANAL**\n"
+        f"Estado: **{estado}**\n"
+        f"Tabla(s) al finalizar: **{TABLAS_AL_FINALIZAR.upper()}**"
+    )
+
 
 # =========================
 # SIMULACIÓN KURO
